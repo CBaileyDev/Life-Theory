@@ -26,7 +26,7 @@ var _transformed := false
 
 func _ready() -> void:
 	_build_environment()
-	_world = WorldBuilder.new(_quality_density())
+	_world = WorldBuilder.new(_quality_density(), GameState.current_biome)
 	var world_root := Node3D.new()
 	world_root.name = "World"
 	add_child(world_root)
@@ -44,6 +44,13 @@ func _ready() -> void:
 
 	if GameState.pending_load:
 		_restore_save()
+	elif GameState.current_biome == GameState.Biome.LOOMSTRATA:
+		# Descended into the layer beneath — already magical, themed deeper.
+		_transformed = true
+		_apply_magical_palette()
+		_reveal_hidden()
+		GameState.broadcast()
+		GameState.toast.emit("You descend. The Loomstrata hums beneath the forest.")
 	else:
 		GameState.broadcast()
 		GameState.toast.emit("A quiet forest. A narrow trail. Something glows ahead.")

@@ -93,11 +93,24 @@ func _build_shop() -> void:
 			col.add_child(_make_node_card(node))
 
 	_panel_v.add_child(_spacer(8))
+	var row := CenterContainer.new()
+	var rowbox := HBoxContainer.new()
+	rowbox.add_theme_constant_override("separation", 16)
+	row.add_child(rowbox)
+	# Descend to the next layer once the quest is complete.
+	if GameState.quest_complete and GameState.current_biome == GameState.Biome.QUIETWOOD:
+		var descend := UITheme.make_button("Descend  ↓  to the Loomstrata", 320)
+		descend.pressed.connect(_descend)
+		rowbox.add_child(descend)
 	var close := UITheme.make_button("Close", 220)
 	close.pressed.connect(_close)
-	var cc := CenterContainer.new()
-	cc.add_child(close)
-	_panel_v.add_child(cc)
+	rowbox.add_child(close)
+	_panel_v.add_child(row)
+
+func _descend() -> void:
+	GameState.current_biome = GameState.Biome.LOOMSTRATA
+	_close()
+	get_tree().change_scene_to_file("res://scenes/Loading.tscn")
 
 func _make_node_card(node: Dictionary) -> Control:
 	var owned: bool = GameState.has_upgrade(node["id"])

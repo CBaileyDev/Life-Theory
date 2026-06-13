@@ -6,6 +6,7 @@ extends Node
 
 # ---------------------------------------------------------------- enumerations
 enum World { NATURAL, FIRST_LAYER }
+enum Biome { QUIETWOOD, LOOMSTRATA }   # the forest, and the layer beneath it
 
 enum Step {
 	FIND_MUSHROOM,     # 0 - locate & interact with the glowing mushroom
@@ -48,6 +49,7 @@ signal toast(text: String)
 const FRAGMENT_TOTAL := 3
 
 var world: int = World.NATURAL
+var current_biome: int = Biome.QUIETWOOD
 var quest_step: int = Step.FIND_MUSHROOM
 var fragments: int = 0
 var mushroom_activated: bool = false
@@ -84,6 +86,7 @@ var sight_reagents: int = 1
 
 func reset_run() -> void:
 	world = World.NATURAL
+	current_biome = Biome.QUIETWOOD
 	quest_step = Step.FIND_MUSHROOM
 	fragments = 0
 	mushroom_activated = false
@@ -307,6 +310,7 @@ func request_dialogue(speaker: String, lines: Array) -> void:
 func to_dict() -> Dictionary:
 	return {
 		"world": world,
+		"current_biome": current_biome,
 		"quest_step": quest_step,
 		"fragments": fragments,
 		"mushroom_activated": mushroom_activated,
@@ -333,6 +337,7 @@ func from_dict(d: Dictionary) -> void:
 	if d.is_empty():
 		return
 	world = d.get("world", world)
+	current_biome = d.get("current_biome", current_biome)
 	quest_step = d.get("quest_step", quest_step)
 	fragments = d.get("fragments", fragments)
 	mushroom_activated = d.get("mushroom_activated", mushroom_activated)

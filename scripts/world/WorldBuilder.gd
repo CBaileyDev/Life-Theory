@@ -33,6 +33,7 @@ const FRAGMENT_POS := [
 
 var rng := RandomNumberGenerator.new()
 var density := 1.0
+var biome := 0   # GameState.Biome: 0 Quietwood, 1 Loomstrata
 
 # Outputs collected during build.
 var trail_markers: Array[Node3D] = []
@@ -56,9 +57,10 @@ var _smalltree_scenes: Array = []
 var _rock_scenes: Array = []
 var _ground_scenes: Array = []
 
-func _init(quality_density := 1.0) -> void:
+func _init(quality_density := 1.0, biome_id := 0) -> void:
 	density = quality_density
-	rng.seed = WORLD_SEED
+	biome = biome_id
+	rng.seed = WORLD_SEED + biome * 101  # a distinct layout per biome
 	_hnoise = FastNoiseLite.new()
 	_hnoise.seed = WORLD_SEED
 	_hnoise.frequency = 0.035
@@ -68,9 +70,14 @@ func _init(quality_density := 1.0) -> void:
 	_bark = MeshFactory.mat_pbr("bark", 0.5, Color(0.27, 0.20, 0.15))
 	_rock = MeshFactory.mat_pbr("rock", 0.4, Color(0.30, 0.33, 0.36))
 	_ground_mat = MeshFactory.mat_pbr("ground", 0.12, Color(0.13, 0.19, 0.10))
-	# Several green variants give the canopy/foliage natural colour variation.
-	for c in [Color(0.12, 0.26, 0.15), Color(0.15, 0.30, 0.17),
-			Color(0.10, 0.22, 0.13), Color(0.17, 0.32, 0.16)]:
+	# Several variants give natural colour variation; the Loomstrata runs cooler
+	# and more violet (a deeper, stranger layer).
+	var leaf_colors := [Color(0.12, 0.26, 0.15), Color(0.15, 0.30, 0.17),
+			Color(0.10, 0.22, 0.13), Color(0.17, 0.32, 0.16)]
+	if biome == 1:
+		leaf_colors = [Color(0.16, 0.22, 0.30), Color(0.22, 0.20, 0.34),
+			Color(0.12, 0.24, 0.28), Color(0.26, 0.24, 0.38)]
+	for c in leaf_colors:
 		_leaf_variants.append(MeshFactory.mat_foliage(c, 0.16))
 	for c in [Color(0.14, 0.28, 0.16), Color(0.17, 0.31, 0.15)]:
 		_bush_variants.append(MeshFactory.mat_foliage(c, 0.12))
@@ -206,7 +213,9 @@ func _build_boundary(parent: Node3D) -> void:
 func _scatter_trees(parent: Node3D) -> void:
 	var use_models: bool = _tree_scenes.size() > 0
 	# Photoscanned trees are heavier than primitives, so use fewer of them.
-	var count := int((90 if use_models else 140) * density)
+	# The Loomstrata is sparser and stranger.
+	var biome_mult := 0.65 if biome == 1 else 1.0
+	var count := int((90 if use_models else 140) * density * biome_mult)
 	var placed := 0
 	var attempts := 0
 	while placed < count and attempts < count * 6:
