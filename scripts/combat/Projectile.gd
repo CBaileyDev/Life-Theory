@@ -51,6 +51,9 @@ func _on_hit(other) -> void:
 		return
 	if other.is_in_group("enemy") and other.has_method("take_damage"):
 		other.take_damage(DAMAGE, _source)
+		var huds := get_tree().get_nodes_in_group("hud")
+		if huds.size() > 0 and huds[0].has_method("hitmarker"):
+			huds[0].hitmarker()
 		queue_free()
 	elif other is StaticBody3D:
 		queue_free()

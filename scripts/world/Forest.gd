@@ -47,6 +47,24 @@ func _ready() -> void:
 		GameState.broadcast()
 		GameState.toast.emit("A quiet forest. A narrow trail. Something glows ahead.")
 	AudioManager.play_ambience("forest_day")
+	_start_ambient_life()
+
+# Occasional birdsong / wind gusts layered over the ambience bed.
+var _amb_timer: Timer
+
+func _start_ambient_life() -> void:
+	_amb_timer = Timer.new()
+	_amb_timer.one_shot = true
+	add_child(_amb_timer)
+	_amb_timer.timeout.connect(_ambient_tick)
+	_amb_timer.start(randf_range(3.0, 6.0))
+
+func _ambient_tick() -> void:
+	if randf() < 0.6:
+		AudioManager.play("bird", -14.0, randf_range(0.9, 1.2))
+	else:
+		AudioManager.play("wind", -16.0)
+	_amb_timer.start(randf_range(5.0, 11.0))
 
 # ------------------------------------------------------------- environment
 func _build_environment() -> void:

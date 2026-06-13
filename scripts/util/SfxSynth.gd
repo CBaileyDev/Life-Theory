@@ -123,6 +123,12 @@ static func sfx(name: String) -> AudioStreamWAV:
 			return _wav(_mix(base, shimmer))
 		"footstep":
 			return _wav(tone(0.07, 120.0, 70.0, [1.0], false, 0.5, 0.002, 0.05, 0.28))
+		"bird":
+			# A short high warble.
+			return _wav(_seq([2200.0, 2900.0, 2500.0, 3100.0], 0.05, false, 0.3))
+		"wind":
+			# A soft noise swell.
+			return _wav(tone(1.2, 200.0, 140.0, [1.0], false, 0.6, 0.5, 0.6, 0.18))
 		_:
 			# Generic soft blip for any unlisted cue.
 			return _wav(tone(0.08, 440.0, -1.0, [1.0], false, 0.0, 0.06, 0.3))
