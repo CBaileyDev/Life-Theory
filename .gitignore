@@ -1,0 +1,21 @@
+# Godot 4 ----------------------------------------------------------------
+.godot/
+.import/
+export.cfg
+
+# Exported builds
+/build/
+/exports/
+*.exe
+*.pck
+*.dmg
+*.app/
+*.zip
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor
+*.tmp
+*~

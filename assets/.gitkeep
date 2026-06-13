@@ -1,0 +1,2 @@
+# Optional binary art assets (models, textures). The prototype uses none —
+# all geometry is procedural (see scripts/util/MeshFactory.gd).
