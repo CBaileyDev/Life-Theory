@@ -25,7 +25,9 @@ var _stamina := STAMINA_MAX
 var _yaw := 0.0
 var _pitch := 0.0
 var _trauma := 0.0
+var _bob_t := 0.0
 const _HEAD_BASE := Vector3(0, 1.65, 0)
+const _WEAPON_BASE := Vector3(0.32, -0.28, -0.55)
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 var _attack_timer := 0.0
 var _cast_timer := 0.0
@@ -170,6 +172,14 @@ func _process(delta: float) -> void:
 			randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), 0.0) * 0.14 * amt
 	elif head.position != _HEAD_BASE:
 		head.position = _HEAD_BASE
+	# View-model bob while moving on the ground.
+	if weapon_pivot and weapon_pivot.visible:
+		var hspeed := Vector2(velocity.x, velocity.z).length()
+		var walk := clampf(hspeed / WALK_SPEED, 0.0, 1.6)
+		_bob_t += delta * (10.0 if hspeed > WALK_SPEED + 0.5 else 7.0) * walk
+		var amt := walk * 0.018
+		weapon_pivot.position = _WEAPON_BASE + Vector3(
+			sin(_bob_t) * amt, absf(sin(_bob_t * 2.0)) * amt, 0.0)
 
 # ------------------------------------------------------------------- input
 func _unhandled_input(event: InputEvent) -> void:
@@ -247,6 +257,8 @@ func _update_interaction() -> void:
 	_interact_target = target
 	if _hud and _hud.has_method("set_prompt"):
 		_hud.set_prompt(target.get_prompt() if target else "")
+	if _hud and _hud.has_method("set_crosshair_active"):
+		_hud.set_crosshair_active(target != null)
 
 func _try_interact() -> void:
 	if _interact_target and _interact_target.has_method("interact"):

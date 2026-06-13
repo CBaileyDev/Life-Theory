@@ -163,6 +163,18 @@ func set_stamina(frac: float) -> void:
 	if _stamina_fill:
 		_stamina_fill.size.x = 220.0 * clampf(frac, 0.0, 1.0)
 
+func set_crosshair_active(active: bool) -> void:
+	if not _crosshair:
+		return
+	if active:
+		_crosshair.color = UITheme.GOLD
+		_crosshair.size = Vector2(7, 7)
+		_crosshair.position = Vector2(-3.5, -3.5)
+	else:
+		_crosshair.color = Color(0.9, 0.95, 0.95, 0.5)
+		_crosshair.size = Vector2(4, 4)
+		_crosshair.position = Vector2(-2, -2)
+
 func hitmarker() -> void:
 	if not _hitmarker:
 		return
