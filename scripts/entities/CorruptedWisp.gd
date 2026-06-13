@@ -167,7 +167,7 @@ func _strike() -> void:
 	if state == State.DEAD:
 		return
 	if _player and global_position.distance_to(_player.global_position) <= ATTACK_RANGE * 1.3:
-		GameState.damage_player(ATTACK_DAMAGE)
+		GameState.damage_player(ATTACK_DAMAGE * SettingsManager.enemy_damage_mult())
 
 func _clamp_hover(delta: float) -> void:
 	# Keep it floating near hover height with a gentle bob.

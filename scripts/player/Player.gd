@@ -21,6 +21,7 @@ const STAMINA_DRAIN := 24.0
 const STAMINA_REGEN := 16.0
 
 var _stamina := STAMINA_MAX
+var _sprint_toggled := false
 
 var _yaw := 0.0
 var _pitch := 0.0
@@ -160,7 +161,9 @@ func _apply_fov(fov: float) -> void:
 
 # --------------------------------------------------------------- camera shake
 func _on_damaged(amount: float) -> void:
-	_trauma = minf(_trauma + clampf(amount / 30.0, 0.2, 0.7), 1.0)
+	if SettingsManager.reduce_motion:
+		return
+	_trauma = minf(_trauma + clampf(amount / 30.0, 0.2, 0.7) * SettingsManager.screen_shake, 1.0)
 
 func _process(delta: float) -> void:
 	if not head:
@@ -173,7 +176,7 @@ func _process(delta: float) -> void:
 	elif head.position != _HEAD_BASE:
 		head.position = _HEAD_BASE
 	# View-model bob while moving on the ground.
-	if weapon_pivot and weapon_pivot.visible:
+	if weapon_pivot and weapon_pivot.visible and not SettingsManager.reduce_motion:
 		var hspeed := Vector2(velocity.x, velocity.z).length()
 		var walk := clampf(hspeed / WALK_SPEED, 0.0, 1.6)
 		_bob_t += delta * (10.0 if hspeed > WALK_SPEED + 0.5 else 7.0) * walk
@@ -199,6 +202,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_camera()
 	elif event.is_action_pressed("interact"):
 		_try_interact()
+	elif event.is_action_pressed("sprint") and SettingsManager.sprint_toggle:
+		_sprint_toggled = not _sprint_toggled
 
 # ----------------------------------------------------------------- movement
 func _physics_process(delta: float) -> void:
@@ -213,7 +218,8 @@ func _physics_process(delta: float) -> void:
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var dir := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
 
-	var wants_sprint := Input.is_action_pressed("sprint") and input_dir.y < 0.0
+	var sprint_held := _sprint_toggled if SettingsManager.sprint_toggle else Input.is_action_pressed("sprint")
+	var wants_sprint := sprint_held and input_dir.y < 0.0
 	var sprinting := wants_sprint and _stamina > 1.0
 	if sprinting:
 		_stamina = maxf(_stamina - STAMINA_DRAIN * delta, 0.0)

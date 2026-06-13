@@ -30,6 +30,26 @@ var fov: float = 75.0
 var invert_y: bool = false
 var render_scale: float = 1.0   # 3D resolution scale (perf lever for weak HW)
 
+# Accessibility / gameplay
+enum Difficulty { STORY, SEEKER, TRIAL }
+var difficulty: int = Difficulty.SEEKER
+var screen_shake: float = 1.0   # 0 disables camera shake
+var reduce_motion: bool = false # disables view-bob + shake
+var sprint_toggle: bool = false # toggle vs hold to sprint
+var subtitles: bool = true
+
+func enemy_damage_mult() -> float:
+	match difficulty:
+		Difficulty.STORY: return 0.6
+		Difficulty.TRIAL: return 1.5
+		_: return 1.0
+
+func difficulty_name(i := -1) -> String:
+	match (i if i >= 0 else difficulty):
+		Difficulty.STORY: return "Story"
+		Difficulty.TRIAL: return "Trial"
+		_: return "Seeker"
+
 func _ready() -> void:
 	load_settings()
 	apply_window_settings()
@@ -49,8 +69,13 @@ func load_settings() -> void:
 	mouse_sensitivity = cfg.get_value("input", "mouse_sensitivity", mouse_sensitivity)
 	third_person = cfg.get_value("input", "third_person", third_person)
 	invert_y = cfg.get_value("input", "invert_y", invert_y)
+	sprint_toggle = cfg.get_value("input", "sprint_toggle", sprint_toggle)
 	fov = cfg.get_value("video", "fov", fov)
 	master_volume = cfg.get_value("audio", "master_volume", master_volume)
+	difficulty = cfg.get_value("game", "difficulty", difficulty)
+	screen_shake = cfg.get_value("access", "screen_shake", screen_shake)
+	reduce_motion = cfg.get_value("access", "reduce_motion", reduce_motion)
+	subtitles = cfg.get_value("access", "subtitles", subtitles)
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
@@ -61,8 +86,13 @@ func save_settings() -> void:
 	cfg.set_value("input", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("input", "third_person", third_person)
 	cfg.set_value("input", "invert_y", invert_y)
+	cfg.set_value("input", "sprint_toggle", sprint_toggle)
 	cfg.set_value("video", "fov", fov)
 	cfg.set_value("audio", "master_volume", master_volume)
+	cfg.set_value("game", "difficulty", difficulty)
+	cfg.set_value("access", "screen_shake", screen_shake)
+	cfg.set_value("access", "reduce_motion", reduce_motion)
+	cfg.set_value("access", "subtitles", subtitles)
 	cfg.save(CONFIG_PATH)
 
 # ------------------------------------------------------------------- setters
@@ -102,6 +132,26 @@ func set_invert_y(on: bool) -> void:
 func set_render_scale(v: float) -> void:
 	render_scale = clampf(v, 0.5, 1.0)
 	get_viewport().scaling_3d_scale = render_scale
+	save_settings()
+
+func set_difficulty(i: int) -> void:
+	difficulty = clampi(i, Difficulty.STORY, Difficulty.TRIAL)
+	save_settings()
+
+func set_screen_shake(v: float) -> void:
+	screen_shake = clampf(v, 0.0, 1.0)
+	save_settings()
+
+func set_reduce_motion(on: bool) -> void:
+	reduce_motion = on
+	save_settings()
+
+func set_sprint_toggle(on: bool) -> void:
+	sprint_toggle = on
+	save_settings()
+
+func set_subtitles(on: bool) -> void:
+	subtitles = on
 	save_settings()
 
 func set_master_volume(v: float) -> void:

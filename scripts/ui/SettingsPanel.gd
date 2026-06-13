@@ -118,6 +118,42 @@ func _build() -> void:
 	inv.toggled.connect(func(on): SettingsManager.set_invert_y(on))
 	v.add_child(_row("Invert Look (Y)", inv))
 
+	# ---- Accessibility & gameplay ----
+	v.add_child(_spacer(6))
+	v.add_child(UITheme.make_label("Accessibility & Gameplay", 16, UITheme.ACCENT))
+
+	var diff := OptionButton.new()
+	diff.add_item("Story")
+	diff.add_item("Seeker")
+	diff.add_item("Trial")
+	diff.selected = SettingsManager.difficulty
+	diff.item_selected.connect(func(i): SettingsManager.set_difficulty(i))
+	v.add_child(_row("Difficulty", diff))
+
+	var shake := HSlider.new()
+	shake.min_value = 0.0
+	shake.max_value = 1.0
+	shake.step = 0.1
+	shake.value = SettingsManager.screen_shake
+	shake.custom_minimum_size = Vector2(220, 0)
+	shake.value_changed.connect(func(v2): SettingsManager.set_screen_shake(v2))
+	v.add_child(_row("Screen Shake", shake))
+
+	var motion := CheckBox.new()
+	motion.button_pressed = SettingsManager.reduce_motion
+	motion.toggled.connect(func(on): SettingsManager.set_reduce_motion(on))
+	v.add_child(_row("Reduce Motion", motion))
+
+	var sprintc := CheckBox.new()
+	sprintc.button_pressed = SettingsManager.sprint_toggle
+	sprintc.toggled.connect(func(on): SettingsManager.set_sprint_toggle(on))
+	v.add_child(_row("Sprint: Toggle (off = Hold)", sprintc))
+
+	var subs := CheckBox.new()
+	subs.button_pressed = SettingsManager.subtitles
+	subs.toggled.connect(func(on): SettingsManager.set_subtitles(on))
+	v.add_child(_row("Subtitles", subs))
+
 	v.add_child(_spacer(8))
 	var back := UITheme.make_button("Back", 180)
 	var back_cb := func():
