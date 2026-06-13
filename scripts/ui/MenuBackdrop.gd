@@ -16,6 +16,7 @@ func _ready() -> void:
 	vp.own_world_3d = true
 	vp.transparent_bg = false
 	vp.msaa_3d = Viewport.MSAA_2X
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(vp)
 	_build_world(vp)
 
@@ -73,6 +74,7 @@ func _build_world(vp: SubViewport) -> void:
 	_cam = Camera3D.new()
 	_cam.fov = 60.0
 	vp.add_child(_cam)
+	_cam.current = true
 
 func _process(delta: float) -> void:
 	if not _cam:
