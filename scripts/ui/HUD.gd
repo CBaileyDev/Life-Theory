@@ -13,6 +13,7 @@ var _health_label: Label
 var _toast_label: Label
 var _damage_vignette: ColorRect
 var _toast_tween: Tween
+var _health_tween: Tween
 
 func _ready() -> void:
 	add_to_group("hud")
@@ -28,6 +29,23 @@ func _build() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+
+	# Cinematic vignette (always-on, darkens the frame edges).
+	var vg := GradientTexture2D.new()
+	var vgrad := Gradient.new()
+	vgrad.set_color(0, Color(0, 0, 0, 0))
+	vgrad.set_color(1, Color(0, 0, 0, 0.42))
+	vg.gradient = vgrad
+	vg.fill = GradientTexture2D.FILL_RADIAL
+	vg.fill_from = Vector2(0.5, 0.5)
+	vg.fill_to = Vector2(1.0, 0.5)
+	var vignette := TextureRect.new()
+	vignette.texture = vg
+	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(vignette)
 
 	# Damage vignette (hidden until hurt).
 	_damage_vignette = ColorRect.new()
@@ -122,7 +140,13 @@ func _on_fragments_changed(collected: int, total: int) -> void:
 
 func _on_health_changed(health: float, max_health: float) -> void:
 	var frac := clampf(health / maxf(max_health, 1.0), 0.0, 1.0)
-	_health_fill.size.x = 220.0 * frac
+	# Smoothly animate the bar width and shift colour green -> red as it drops.
+	if _health_tween and _health_tween.is_valid():
+		_health_tween.kill()
+	_health_tween = create_tween().set_parallel(true)
+	_health_tween.tween_property(_health_fill, "size:x", 220.0 * frac, 0.25)
+	var col := Color(0.78, 0.22, 0.26).lerp(Color(0.45, 0.74, 0.45), frac)
+	_health_tween.tween_property(_health_fill, "color", col, 0.25)
 	# Brief red pulse when taking damage.
 	if frac < 1.0:
 		_damage_vignette.color.a = (1.0 - frac) * 0.35

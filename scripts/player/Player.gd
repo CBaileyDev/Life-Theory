@@ -19,6 +19,8 @@ const FALL_RESET_Y := -25.0
 
 var _yaw := 0.0
 var _pitch := 0.0
+var _trauma := 0.0
+const _HEAD_BASE := Vector3(0, 1.65, 0)
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 var _attack_timer := 0.0
 var _cast_timer := 0.0
@@ -48,6 +50,7 @@ func _ready() -> void:
 	SettingsManager.camera_mode_changed.connect(_apply_camera_mode)
 	SettingsManager.fov_changed.connect(_apply_fov)
 	GameState.player_died.connect(_on_died)
+	GameState.player_damaged.connect(_on_damaged)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_hud = _first_in_group("hud")
 
@@ -140,6 +143,21 @@ func _apply_fov(fov: float) -> void:
 		fp_camera.fov = fov
 	if tp_camera:
 		tp_camera.fov = fov
+
+# --------------------------------------------------------------- camera shake
+func _on_damaged(amount: float) -> void:
+	_trauma = minf(_trauma + clampf(amount / 30.0, 0.2, 0.7), 1.0)
+
+func _process(delta: float) -> void:
+	if not head:
+		return
+	if _trauma > 0.0:
+		_trauma = maxf(_trauma - delta * 1.6, 0.0)
+		var amt := _trauma * _trauma
+		head.position = _HEAD_BASE + Vector3(
+			randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), 0.0) * 0.14 * amt
+	elif head.position != _HEAD_BASE:
+		head.position = _HEAD_BASE
 
 # ------------------------------------------------------------------- input
 func _unhandled_input(event: InputEvent) -> void:

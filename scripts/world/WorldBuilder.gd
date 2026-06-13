@@ -33,19 +33,29 @@ var rune_quads: Array[MeshInstance3D] = []
 
 # Shared materials (created once).
 var _bark: StandardMaterial3D
-var _leaf: StandardMaterial3D
 var _rock: StandardMaterial3D
-var _bush: StandardMaterial3D
-var _grass: StandardMaterial3D
+var _ground_mat: Material
+var _leaf_variants: Array = []
+var _bush_variants: Array = []
+var _grass_variants: Array = []
 
 func _init(quality_density := 1.0) -> void:
 	density = quality_density
 	rng.seed = WORLD_SEED
 	_bark = MeshFactory.mat_standard(Color(0.27, 0.20, 0.15), 0.9)
-	_leaf = MeshFactory.mat_standard(Color(0.13, 0.27, 0.16), 0.95)
 	_rock = MeshFactory.mat_standard(Color(0.30, 0.33, 0.36), 0.85)
-	_bush = MeshFactory.mat_standard(Color(0.16, 0.30, 0.18), 0.95)
-	_grass = MeshFactory.mat_standard(Color(0.22, 0.38, 0.20), 0.95)
+	_ground_mat = MeshFactory.mat_ground(Color(0.13, 0.19, 0.10), Color(0.23, 0.18, 0.12))
+	# Several green variants give the canopy/foliage natural colour variation.
+	for c in [Color(0.12, 0.26, 0.15), Color(0.15, 0.30, 0.17),
+			Color(0.10, 0.22, 0.13), Color(0.17, 0.32, 0.16)]:
+		_leaf_variants.append(MeshFactory.mat_foliage(c, 0.16))
+	for c in [Color(0.14, 0.28, 0.16), Color(0.17, 0.31, 0.15)]:
+		_bush_variants.append(MeshFactory.mat_foliage(c, 0.12))
+	for c in [Color(0.20, 0.36, 0.18), Color(0.24, 0.40, 0.20), Color(0.18, 0.33, 0.16)]:
+		_grass_variants.append(MeshFactory.mat_foliage(c, 0.22))
+
+func _pick(arr: Array) -> Material:
+	return arr[rng.randi_range(0, arr.size() - 1)]
 
 func build(parent: Node3D) -> void:
 	_build_ground(parent)
@@ -66,7 +76,7 @@ func _build_ground(parent: Node3D) -> void:
 	pm.subdivide_width = 8
 	pm.subdivide_depth = 8
 	mi.mesh = pm
-	mi.material_override = MeshFactory.mat_standard(Color(0.12, 0.17, 0.11), 1.0)
+	mi.material_override = _ground_mat
 	parent.add_child(mi)
 
 	var body := StaticBody3D.new()
@@ -119,7 +129,7 @@ func _scatter_trees(parent: Node3D) -> void:
 		var p := _random_point()
 		if _in_clearing(p) or _on_path(p):
 			continue
-		var tree := MeshFactory.make_tree(rng, _bark, _leaf)
+		var tree := MeshFactory.make_tree(rng, _bark, _pick(_leaf_variants))
 		tree.position = p
 		parent.add_child(tree)
 		placed += 1
@@ -140,13 +150,13 @@ func _scatter_foliage(parent: Node3D) -> void:
 		var p := _random_point()
 		if _on_path(p):
 			continue
-		var b := MeshFactory.make_bush(rng, _bush)
+		var b := MeshFactory.make_bush(rng, _pick(_bush_variants))
 		b.position = p
 		parent.add_child(b)
 	var tufts := int(220 * density)
 	for i in tufts:
 		var p := _random_point()
-		var g := MeshFactory.make_grass_tuft(rng, _grass)
+		var g := MeshFactory.make_grass_tuft(rng, _pick(_grass_variants))
 		g.position = p
 		parent.add_child(g)
 

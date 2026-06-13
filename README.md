@@ -94,6 +94,11 @@ Set in the main menu or pause menu → **Settings**. Defaults to **Medium**.
 | **Medium** | on | on | off | 2× | ~0.85× |
 | **High** | on | on | on | 4× | ~1.2× |
 
+**High** additionally enables **volumetric fog** for soft light shafts in the
+mist (the most expensive effect — kept off below High for the MacBook target).
+All presets use a cinematic colour grade (contrast/saturation), bloom, a
+procedural moss/dirt **ground shader**, and **wind-swayed foliage**.
+
 \* Foliage/tree density is chosen when the forest is built. Changing quality
 mid-run updates lighting/AA instantly; the new density takes effect next time
 you enter the forest. Also configurable: **mouse sensitivity, field of view,
@@ -190,6 +195,8 @@ scripts/
 shaders/
   screen_transition.gdshader  # transformation distortion/flash (canvas_item)
   rune_glow.gdshader          # pulsing tree runes (spatial)
+  foliage_wind.gdshader       # per-instance wind sway for trees/bushes/grass
+  ground.gdshader             # procedural moss/dirt fBm forest floor
 audio/                   # empty hooks + README (drop OGG/WAV here)
 assets/  materials/      # placeholders; prototype is fully procedural
 docs/                    # DESIGN, DECISIONS, BUILD

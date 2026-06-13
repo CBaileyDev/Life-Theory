@@ -69,9 +69,22 @@ func _build_environment() -> void:
 	_env.fog_light_color = Color(0.45, 0.55, 0.52)
 	_env.fog_density = 0.018
 	_env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	_env.tonemap_exposure = 1.05
 	_env.glow_enabled = true
-	_env.glow_intensity = 0.5
-	_env.glow_bloom = 0.1
+	_env.glow_intensity = 0.6
+	_env.glow_strength = 1.1
+	_env.glow_bloom = 0.15
+	_env.glow_hdr_threshold = 0.92
+	# Cinematic colour grade (cheap GPU adjustment).
+	_env.adjustment_enabled = true
+	_env.adjustment_brightness = 1.02
+	_env.adjustment_contrast = 1.06
+	_env.adjustment_saturation = 1.16
+	# Volumetric fog base config (enabled only on High in _apply_graphics).
+	_env.volumetric_fog_density = 0.018
+	_env.volumetric_fog_albedo = Color(0.55, 0.62, 0.60)
+	_env.volumetric_fog_emission = Color(0.0, 0.0, 0.0)
+	_env.volumetric_fog_gi_inject = 0.3
 	we.environment = _env
 	add_child(we)
 
@@ -266,7 +279,10 @@ func _apply_magical_palette() -> void:
 		t.tween_property(_sky_mat, "sky_top_color", Color(0.10, 0.06, 0.20), 1.5)
 		t.tween_property(_sky_mat, "sky_horizon_color", Color(0.24, 0.20, 0.42), 1.5)
 		t.tween_property(_sky_mat, "ground_horizon_color", Color(0.14, 0.12, 0.24), 1.5)
-	_env.glow_intensity = 0.9
+	_env.glow_intensity = 0.95
+	_env.adjustment_saturation = 1.28
+	_env.volumetric_fog_emission = Color(0.16, 0.10, 0.30)
+	_env.volumetric_fog_albedo = Color(0.45, 0.50, 0.66)
 	# Fireflies turn cool and multiply.
 	var ppm := _fireflies.process_material as ParticleProcessMaterial
 	if ppm:
@@ -324,16 +340,19 @@ func _apply_graphics(quality: int) -> void:
 		_dir.shadow_enabled = false
 		_env.glow_enabled = false
 		_env.ssao_enabled = false
+		_env.volumetric_fog_enabled = false
 		vp.msaa_3d = Viewport.MSAA_DISABLED
 	elif quality == SettingsManager.Quality.HIGH:
 		_dir.shadow_enabled = true
 		_env.glow_enabled = true
 		_env.ssao_enabled = true
+		_env.volumetric_fog_enabled = true   # soft light shafts in the mist
 		vp.msaa_3d = Viewport.MSAA_4X
 	else:  # Medium (default)
 		_dir.shadow_enabled = true
 		_env.glow_enabled = true
 		_env.ssao_enabled = false
+		_env.volumetric_fog_enabled = false
 		vp.msaa_3d = Viewport.MSAA_2X
 	# Note: foliage/tree density is chosen at build time via _quality_density();
 	# changing quality mid-run updates lighting/AA immediately and full density

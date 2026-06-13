@@ -11,6 +11,7 @@ var _hint_label: Label
 var _lines: Array = []
 var _index := 0
 var _open := false
+var _type_tween: Tween
 
 func _ready() -> void:
 	add_to_group("dialogue")
@@ -50,17 +51,30 @@ func open(speaker: String, lines: Array) -> void:
 	_open = true
 	_speaker_label.text = speaker
 	_speaker_label.visible = speaker != ""
-	_text_label.text = str(_lines[0])
 	_panel.visible = true
+	_show_line(str(_lines[0]))
 	AudioManager.play("magic_hum", -10.0)
+
+func _show_line(text: String) -> void:
+	# Typewriter reveal via Label.visible_ratio.
+	_text_label.text = text
+	if _type_tween and _type_tween.is_valid():
+		_type_tween.kill()
+	_text_label.visible_ratio = 0.0
+	var dur := clampf(text.length() * 0.022, 0.2, 2.0)
+	_type_tween = create_tween()
+	_type_tween.tween_property(_text_label, "visible_ratio", 1.0, dur)
+
+func _typing() -> bool:
+	return _type_tween != null and _type_tween.is_valid() and _text_label.visible_ratio < 1.0
 
 func _advance() -> void:
 	_index += 1
 	if _index >= _lines.size():
 		_close()
 	else:
-		_text_label.text = str(_lines[_index])
 		AudioManager.play("ui_click", -8.0)
+		_show_line(str(_lines[_index]))
 
 func _close() -> void:
 	_open = false
@@ -71,5 +85,10 @@ func _input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("interact") or event.is_action_pressed("ui_accept") \
 			or event.is_action_pressed("attack"):
-		_advance()
+		# First press finishes the typewriter; next press advances.
+		if _typing():
+			_type_tween.kill()
+			_text_label.visible_ratio = 1.0
+		else:
+			_advance()
 		get_viewport().set_input_as_handled()

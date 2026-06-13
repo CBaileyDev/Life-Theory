@@ -8,6 +8,42 @@ extends RefCounted
 ## therefore identical on macOS and Windows.
 
 # ---------------------------------------------------------------- materials
+static var _foliage_shader: Shader = null
+static var _ground_shader: Shader = null
+
+static func _foliage() -> Shader:
+	if _foliage_shader == null:
+		_foliage_shader = load("res://shaders/foliage_wind.gdshader")
+	return _foliage_shader
+
+static func _ground() -> Shader:
+	if _ground_shader == null:
+		_ground_shader = load("res://shaders/ground.gdshader")
+	return _ground_shader
+
+## Wind-swaying foliage material. Falls back to a plain material if the shader
+## is unavailable, so the world always renders.
+static func mat_foliage(color: Color, strength := 0.15, rough := 0.92) -> Material:
+	var sh := _foliage()
+	if sh == null:
+		return mat_standard(color, rough)
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("albedo", Vector3(color.r, color.g, color.b))
+	m.set_shader_parameter("roughness", rough)
+	m.set_shader_parameter("sway_strength", strength)
+	return m
+
+static func mat_ground(moss: Color, dirt: Color) -> Material:
+	var sh := _ground()
+	if sh == null:
+		return mat_standard(moss, 1.0)
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("moss", Vector3(moss.r, moss.g, moss.b))
+	m.set_shader_parameter("dirt", Vector3(dirt.r, dirt.g, dirt.b))
+	return m
+
 static func mat_standard(color: Color, rough := 0.9, metal := 0.0) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color

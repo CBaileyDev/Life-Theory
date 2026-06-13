@@ -32,6 +32,7 @@ signal world_state_changed(state: int)
 signal quest_step_changed(step: int, text: String)
 signal fragments_changed(collected: int, total: int)
 signal health_changed(health: float, max_health: float)
+signal player_damaged(amount: float)
 signal player_died
 signal dialogue_requested(speaker: String, lines: Array)
 signal upgrade_menu_requested
@@ -147,6 +148,7 @@ func damage_player(amount: float) -> void:
 		return
 	health = maxf(health - amount, 0.0)
 	health_changed.emit(health, max_health)
+	player_damaged.emit(amount)
 	AudioManager.play("player_hurt")
 	if health <= 0.0:
 		player_died.emit()
