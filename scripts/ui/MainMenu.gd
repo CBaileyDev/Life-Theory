@@ -82,12 +82,12 @@ func _start_game() -> void:
 	AudioManager.play("ui_click")
 	GameState.reset_run()
 	GameState.pending_load = false
-	get_tree().change_scene_to_file("res://scenes/Forest.tscn")
+	get_tree().change_scene_to_file("res://scenes/Loading.tscn")
 
 func _continue_game() -> void:
 	AudioManager.play("ui_click")
 	GameState.pending_load = true
-	get_tree().change_scene_to_file("res://scenes/Forest.tscn")
+	get_tree().change_scene_to_file("res://scenes/Loading.tscn")
 
 func _open_settings() -> void:
 	AudioManager.play("ui_click")
