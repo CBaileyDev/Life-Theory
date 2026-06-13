@@ -21,11 +21,11 @@ This repository is a **complete, runnable Godot 4.x prototype** — the first
 
 | | |
 |---|---|
-| **Engine** | **Godot 4.x** (developed against **4.2+**; use 4.2 or newer) |
+| **Engine** | **Godot 4.x** (use 4.2+; **validated headlessly against 4.3-stable**) |
 | **Renderer** | Forward+ (Vulkan / Metal via MoltenVK on macOS) |
 | **Language** | GDScript only — no native plugins, no platform-specific code |
 | **Art assets** | **None required** — the entire world is generated procedurally from engine primitives + custom materials/shaders |
-| **Audio assets** | **None required** — cues are hooked and play if you drop files into `audio/` (see `audio/README.md`) |
+| **Audio assets** | **None required** — every cue + ambience is **synthesized procedurally at runtime** (royalty-free), and is transparently overridden if you drop files into `audio/` (see `audio/README.md`) |
 
 Download Godot 4.x (Standard, *not* the .NET/C# build) from <https://godotengine.org/download>.
 
@@ -96,9 +96,17 @@ Set in the main menu or pause menu → **Settings**. Defaults to **Medium**.
 
 \* Foliage/tree density is chosen when the forest is built. Changing quality
 mid-run updates lighting/AA instantly; the new density takes effect next time
-you enter the forest. Also configurable: **mouse sensitivity, master volume,
-fullscreen toggle, resolution selector, and third-person camera toggle**. All
-settings persist to `user://settings.cfg` (cross-platform).
+you enter the forest. Also configurable: **mouse sensitivity, field of view,
+invert-Y look, master volume, fullscreen toggle, resolution selector, and
+third-person camera toggle**. All settings persist to `user://settings.cfg`
+(cross-platform).
+
+### Navigation aids
+
+- A **luminous trail** of runed stones appears at the transformation.
+- A glowing **objective beacon** (light beam + bobbing diamond) marks the
+  current goal in the First Layer — turn toward the glow to find Auralis, the
+  nearest fragment, or the shrine.
 
 ---
 
@@ -178,6 +186,7 @@ scripts/
   ui/                    # MainMenu, HUD, DialogueBox, PauseMenu, UpgradeMenu,
                          # SettingsPanel, UITheme (dark-fantasy styling)
   util/MeshFactory.gd    # primitive mesh + material factory
+  util/SfxSynth.gd       # procedural 16-bit PCM sfx + ambience synthesis
 shaders/
   screen_transition.gdshader  # transformation distortion/flash (canvas_item)
   rune_glow.gdshader          # pulsing tree runes (spatial)
@@ -193,28 +202,30 @@ upgrades, UI, settings, save) and no file is a monolith.
 
 ## Known issues / limitations
 
-- **No editor validation here:** this prototype was authored in a headless
-  environment without a Godot binary, so it has been carefully hand-verified but
-  not run. If the editor flags anything on first import, it will be a small,
-  obvious fix (see `docs/DECISIONS.md` for the verification approach).
-- **Save fidelity:** save/load restores quest/world/upgrade/health and player
-  position. Individual *already-collected* fragments are not flagged per-node, so
-  loading mid-collection may show collected fragments again while the counter
-  stays correct. (Hook noted in `Fragment.gd` / `Forest._restore_save`.)
-- **Audio is silent by default** — cues are wired but ship without files (no
-  protected IP). Drop royalty-free OGGs in `audio/` to hear them.
-- **Footstep cue** is catalogued but not yet triggered per-step (hook only).
-- Graphics-quality foliage density changes apply on next level entry, not live.
+- **Validation:** the project was authored without an editor GUI, but it has been
+  validated against **Godot 4.3-stable** headlessly: a clean `--import` (no parse
+  errors), clean runs of both scenes, and a scripted smoke test of the full quest
+  flow (transformation → guide → 3 fragments → shrine → upgrade → combat) and all
+  audio cues. It has not been play-tested with a mouse/keyboard on a real GPU, so
+  expect to tune feel (movement speed, combat timing, fog/exposure) to taste.
+- **Procedural audio is intentionally simple** (synthesized tones/pads). It's
+  meant as honest placeholder feedback; drop royalty-free OGGs in `audio/` to
+  override any cue with real sound.
+- Graphics-quality **foliage density** changes apply on next level entry, not live
+  (lighting/AA do update live).
+- The headless console prints harmless `Parameter "m" is null` renderer messages
+  because there's no GPU in headless mode; these do not occur in a normal run.
 
 ---
 
 ## Recommended next development steps
 
-1. Add royalty-free audio (ambience + the catalogued SFX) — zero code changes.
-2. Per-step footstep triggering and surface-aware footstep sounds.
+1. Add royalty-free audio (ambience + the catalogued SFX) to `audio/` — it
+   transparently overrides the synthesized fallback, zero code changes.
+2. Surface-aware footstep sounds (grass vs. dirt vs. stone).
 3. Replace primitive trees/creatures with authored/CC0 models via the same
    `MeshFactory`/scene seams.
-4. Per-fragment save flags + a proper save/continue slot UI.
+4. A proper save/continue slot UI (single-slot quick save/load already works).
 5. More creature variety and a light stamina/essence economy.
 6. A short opening title card / cinematic for the transformation.
 7. Gamepad bindings (the `InputMap` is already centralised in `Boot.gd`).

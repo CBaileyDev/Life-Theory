@@ -78,11 +78,31 @@ func _build() -> void:
 	vol.value_changed.connect(func(v2): SettingsManager.set_master_volume(v2))
 	v.add_child(_row("Master Volume", vol))
 
+	# Field of view
+	var fov := HSlider.new()
+	fov.min_value = 60.0
+	fov.max_value = 110.0
+	fov.step = 1.0
+	fov.value = SettingsManager.fov
+	fov.custom_minimum_size = Vector2(220, 0)
+	var fov_val := UITheme.make_label("%d°" % int(SettingsManager.fov), 16, UITheme.TEXT_DIM)
+	var fov_cb := func(v2: float):
+		SettingsManager.set_fov(v2)
+		fov_val.text = "%d°" % int(v2)
+	fov.value_changed.connect(fov_cb)
+	v.add_child(_row("Field of View", fov, fov_val))
+
 	# Camera mode (third-person toggle)
 	var cam := CheckBox.new()
 	cam.button_pressed = SettingsManager.third_person
 	cam.toggled.connect(func(on): SettingsManager.set_third_person(on))
 	v.add_child(_row("Third-Person Camera", cam))
+
+	# Invert vertical look
+	var inv := CheckBox.new()
+	inv.button_pressed = SettingsManager.invert_y
+	inv.toggled.connect(func(on): SettingsManager.set_invert_y(on))
+	v.add_child(_row("Invert Look (Y)", inv))
 
 	v.add_child(_spacer(8))
 	var back := UITheme.make_button("Back", 180)

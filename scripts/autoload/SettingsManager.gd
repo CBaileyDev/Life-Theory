@@ -6,6 +6,7 @@ extends Node
 
 signal graphics_changed(quality: int)
 signal camera_mode_changed(third_person: bool)
+signal fov_changed(fov: float)
 
 enum Quality { LOW, MEDIUM, HIGH }
 
@@ -25,6 +26,8 @@ var fullscreen: bool = false
 var resolution_index: int = 0
 var third_person: bool = false
 var master_volume: float = 0.9
+var fov: float = 75.0
+var invert_y: bool = false
 
 func _ready() -> void:
 	load_settings()
@@ -42,6 +45,8 @@ func load_settings() -> void:
 	resolution_index = cfg.get_value("video", "resolution_index", resolution_index)
 	mouse_sensitivity = cfg.get_value("input", "mouse_sensitivity", mouse_sensitivity)
 	third_person = cfg.get_value("input", "third_person", third_person)
+	invert_y = cfg.get_value("input", "invert_y", invert_y)
+	fov = cfg.get_value("video", "fov", fov)
 	master_volume = cfg.get_value("audio", "master_volume", master_volume)
 
 func save_settings() -> void:
@@ -51,6 +56,8 @@ func save_settings() -> void:
 	cfg.set_value("video", "resolution_index", resolution_index)
 	cfg.set_value("input", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("input", "third_person", third_person)
+	cfg.set_value("input", "invert_y", invert_y)
+	cfg.set_value("video", "fov", fov)
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.save(CONFIG_PATH)
 
@@ -77,6 +84,15 @@ func set_resolution_index(i: int) -> void:
 func set_third_person(on: bool) -> void:
 	third_person = on
 	camera_mode_changed.emit(third_person)
+	save_settings()
+
+func set_fov(v: float) -> void:
+	fov = clampf(v, 60.0, 110.0)
+	fov_changed.emit(fov)
+	save_settings()
+
+func set_invert_y(on: bool) -> void:
+	invert_y = on
 	save_settings()
 
 func set_master_volume(v: float) -> void:

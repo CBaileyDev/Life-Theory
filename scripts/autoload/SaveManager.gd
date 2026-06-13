@@ -24,6 +24,12 @@ func save_game() -> void:
 	if player:
 		cfg.set_value("player", "position", player.global_position)
 		cfg.set_value("player", "yaw", player.get_yaw())
+	# Per-fragment collected state (so collected shards stay gone on load).
+	var collected_indices: Array = []
+	for f in get_tree().get_nodes_in_group("fragment"):
+		if f.collected:
+			collected_indices.append(f.index)
+	cfg.set_value("world", "fragments_collected", collected_indices)
 	cfg.save(SAVE_PATH)
 	saved.emit()
 	print("[SaveManager] Game saved.")
@@ -40,6 +46,7 @@ func load_game() -> Dictionary:
 	if cfg.has_section("player"):
 		data["player_position"] = cfg.get_value("player", "position", Vector3.ZERO)
 		data["player_yaw"] = cfg.get_value("player", "yaw", 0.0)
+	data["fragments_collected"] = cfg.get_value("world", "fragments_collected", [])
 	loaded.emit()
 	return data
 

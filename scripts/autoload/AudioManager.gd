@@ -55,7 +55,9 @@ func _find(dirs: Array, name: String) -> AudioStream:
 func play(cue: String, volume_db: float = 0.0, pitch: float = 1.0) -> void:
 	var stream := _find(SFX_DIRS, cue)
 	if stream == null:
-		return  # No asset installed for this cue yet; silent.
+		stream = _synth_cue(cue)  # Procedural fallback (royalty-free).
+	if stream == null:
+		return
 	var p := _pool[_next]
 	_next = (_next + 1) % _pool.size()
 	p.stream = stream
@@ -66,11 +68,26 @@ func play(cue: String, volume_db: float = 0.0, pitch: float = 1.0) -> void:
 func play_ambience(name: String) -> void:
 	var stream := _find(AMB_DIRS, name)
 	if stream == null:
+		stream = _synth_ambience()  # Procedural fallback.
+	if stream == null:
 		return
 	if stream is AudioStreamOggVorbis:
 		(stream as AudioStreamOggVorbis).loop = true
 	_ambience.stream = stream
 	_ambience.play()
+
+# ------------------------------------------------------- procedural fallback
+var _synth_cache: Dictionary = {}
+
+func _synth_cue(cue: String) -> AudioStream:
+	if not _synth_cache.has(cue):
+		_synth_cache[cue] = SfxSynth.sfx(cue)
+	return _synth_cache[cue]
+
+func _synth_ambience() -> AudioStream:
+	if not _synth_cache.has("__amb"):
+		_synth_cache["__amb"] = SfxSynth.ambience()
+	return _synth_cache["__amb"]
 
 func stop_ambience() -> void:
 	_ambience.stop()

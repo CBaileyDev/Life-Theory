@@ -6,6 +6,7 @@ extends Area3D
 ## Layer. Collected by walking into it (proximity), with a small pickup burst.
 
 @export var collected := false
+var index := -1   # set by the Forest when placed; used for per-fragment saves
 
 var _visual: Node3D
 var _spin := 0.0
@@ -53,6 +54,11 @@ func _set_active(active: bool) -> void:
 
 func _on_world_changed(state: int) -> void:
 	_set_active(state == GameState.World.FIRST_LAYER and not collected)
+
+## Mark as already-collected on load, without re-incrementing the counter.
+func set_collected_silently() -> void:
+	collected = true
+	_set_active(false)
 
 func _on_body_entered(body: Node) -> void:
 	if collected or not body.is_in_group("player"):

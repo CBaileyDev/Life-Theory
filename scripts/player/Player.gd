@@ -22,6 +22,7 @@ var _pitch := 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 var _attack_timer := 0.0
 var _cast_timer := 0.0
+var _step_timer := 0.0
 var _spawn_point := Vector3(0, 2, 18)
 var _interact_target = null   # untyped: interactables are called via duck-typing
 
@@ -43,7 +44,9 @@ func _ready() -> void:
 	_build_camera_rig()
 	_build_weapon()
 	_apply_camera_mode(SettingsManager.third_person)
+	_apply_fov(SettingsManager.fov)
 	SettingsManager.camera_mode_changed.connect(_apply_camera_mode)
+	SettingsManager.fov_changed.connect(_apply_fov)
 	GameState.player_died.connect(_on_died)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_hud = _first_in_group("hud")
@@ -132,12 +135,19 @@ func _apply_camera_mode(third_person: bool) -> void:
 func _toggle_camera() -> void:
 	SettingsManager.set_third_person(not SettingsManager.third_person)
 
+func _apply_fov(fov: float) -> void:
+	if fp_camera:
+		fp_camera.fov = fov
+	if tp_camera:
+		tp_camera.fov = fov
+
 # ------------------------------------------------------------------- input
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var sens := SettingsManager.mouse_sensitivity * 0.01
+		var inv := -1.0 if SettingsManager.invert_y else 1.0
 		_yaw -= event.relative.x * sens
-		_pitch -= event.relative.y * sens
+		_pitch -= event.relative.y * sens * inv
 		_pitch = clampf(_pitch, MOUSE_PITCH_MIN, MOUSE_PITCH_MAX)
 		rotation.y = _yaw
 		head.rotation.x = _pitch
@@ -176,8 +186,19 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	_update_interaction()
+	_update_footsteps(delta)
 	if global_position.y < FALL_RESET_Y:
 		_respawn()
+
+func _update_footsteps(delta: float) -> void:
+	var hspeed := Vector2(velocity.x, velocity.z).length()
+	if is_on_floor() and hspeed > 0.6:
+		_step_timer -= delta
+		if _step_timer <= 0.0:
+			AudioManager.play("footstep", -8.0, randf_range(0.9, 1.1))
+			_step_timer = 0.34 if hspeed > WALK_SPEED + 0.5 else 0.5
+	else:
+		_step_timer = 0.0
 
 # -------------------------------------------------------------- interaction
 func _update_interaction() -> void:

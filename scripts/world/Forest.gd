@@ -16,6 +16,9 @@ var _dir: DirectionalLight3D
 var _world: WorldBuilder
 var _transition_mat: ShaderMaterial
 var _fireflies: GPUParticles3D
+var _sky_mat: ProceduralSkyMaterial
+var _beacon: Node3D
+var _beacon_diamond: Node3D
 var _player   # untyped: Player is accessed via duck-typing (teleport/fp_camera)
 var _transformed := false
 
@@ -29,6 +32,7 @@ func _ready() -> void:
 	_place_entities(world_root)
 	_build_fireflies()
 	_build_transition_overlay()
+	_build_beacon()
 	_build_ui()
 	_spawn_player()
 
@@ -47,8 +51,17 @@ func _ready() -> void:
 func _build_environment() -> void:
 	var we := WorldEnvironment.new()
 	_env = Environment.new()
-	_env.background_mode = Environment.BG_COLOR
-	_env.background_color = Color(0.05, 0.08, 0.09)
+	# Procedural sky for a soft forest-dusk horizon and nicer depth.
+	_sky_mat = ProceduralSkyMaterial.new()
+	_sky_mat.sky_top_color = Color(0.10, 0.16, 0.22)
+	_sky_mat.sky_horizon_color = Color(0.30, 0.34, 0.30)
+	_sky_mat.ground_horizon_color = Color(0.16, 0.18, 0.15)
+	_sky_mat.ground_bottom_color = Color(0.06, 0.08, 0.06)
+	_sky_mat.sun_angle_max = 30.0
+	var sky := Sky.new()
+	sky.sky_material = _sky_mat
+	_env.sky = sky
+	_env.background_mode = Environment.BG_SKY
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	_env.ambient_light_color = Color(0.35, 0.42, 0.40)
 	_env.ambient_light_energy = 0.6
@@ -109,10 +122,13 @@ func _place_entities(root: Node3D) -> void:
 	stag.position = WorldBuilder.STAG_POS
 	root.add_child(stag)
 
+	var fi := 0
 	for fp in WorldBuilder.FRAGMENT_POS:
 		var frag := Fragment.new()
 		frag.position = fp
+		frag.index = fi
 		root.add_child(frag)
+		fi += 1
 
 # ------------------------------------------------------------------- UI
 func _build_ui() -> void:
@@ -135,6 +151,73 @@ func _build_transition_overlay() -> void:
 		_transition_mat.set_shader_parameter("progress", 0.0)
 		rect.material = _transition_mat
 	layer.add_child(rect)
+
+func _build_beacon() -> void:
+	# A glowing vertical beam + bobbing diamond that marks the current
+	# objective in 3D (no 2D projection needed; reads correctly off-screen as
+	# a glow the player turns toward). Shown only in the First Layer.
+	_beacon = Node3D.new()
+	_beacon.name = "ObjectiveBeacon"
+	add_child(_beacon)
+	var beam := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.05
+	cm.bottom_radius = 0.18
+	cm.height = 16.0
+	beam.mesh = cm
+	beam.material_override = MeshFactory.mat_emissive(Color(1.0, 0.85, 0.45, 0.5), 2.0, true)
+	beam.position.y = 8.0
+	_beacon.add_child(beam)
+	_beacon_diamond = MeshInstance3D.new()
+	var dm := SphereMesh.new()
+	dm.radius = 0.35
+	dm.height = 0.9
+	dm.radial_segments = 4
+	dm.rings = 2
+	_beacon_diamond.mesh = dm
+	_beacon_diamond.material_override = MeshFactory.mat_emissive(Color(1.0, 0.9, 0.5), 3.5, true)
+	_beacon_diamond.position.y = 2.4
+	_beacon.add_child(_beacon_diamond)
+	_beacon.visible = false
+
+func _process(delta: float) -> void:
+	if not _beacon:
+		return
+	var pos = _objective_position()
+	if pos == null or not _transformed:
+		_beacon.visible = false
+		return
+	_beacon.visible = true
+	_beacon.global_position = Vector3(pos.x, 0.0, pos.z)
+	var tt := Time.get_ticks_msec() / 1000.0
+	_beacon_diamond.position.y = 2.4 + sin(tt * 2.0) * 0.25
+	_beacon_diamond.rotation.y += delta * 2.0
+
+func _objective_position():
+	var step := GameState.quest_step
+	if step == GameState.Step.FOLLOW_TRAIL or step == GameState.Step.MEET_GUIDE:
+		return WorldBuilder.AURALIS_POS
+	elif step == GameState.Step.COLLECT_FRAGMENTS:
+		return _nearest_fragment()
+	elif step == GameState.Step.RETURN_SHRINE:
+		return WorldBuilder.SHRINE_POS
+	return null
+
+func _nearest_fragment():
+	var origin := Vector3.ZERO
+	var players := get_tree().get_nodes_in_group("player")
+	if players.size() > 0:
+		origin = players[0].global_position
+	var best = null
+	var best_d := INF
+	for f in get_tree().get_nodes_in_group("fragment"):
+		if f.collected:
+			continue
+		var d: float = origin.distance_to(f.global_position)
+		if d < best_d:
+			best_d = d
+			best = f.global_position
+	return best
 
 func _spawn_player() -> void:
 	_player = PlayerScript.new()
@@ -179,7 +262,10 @@ func _apply_magical_palette() -> void:
 	t.tween_property(_env, "fog_light_color", Color(0.35, 0.42, 0.62), 1.0)
 	t.tween_property(_env, "fog_density", 0.028, 1.0)
 	t.tween_property(_env, "ambient_light_color", Color(0.30, 0.36, 0.52), 1.0)
-	t.tween_property(_env, "background_color", Color(0.04, 0.05, 0.10), 1.0)
+	if _sky_mat:
+		t.tween_property(_sky_mat, "sky_top_color", Color(0.10, 0.06, 0.20), 1.5)
+		t.tween_property(_sky_mat, "sky_horizon_color", Color(0.24, 0.20, 0.42), 1.5)
+		t.tween_property(_sky_mat, "ground_horizon_color", Color(0.14, 0.12, 0.24), 1.5)
 	_env.glow_intensity = 0.9
 	# Fireflies turn cool and multiply.
 	var ppm := _fireflies.process_material as ParticleProcessMaterial
@@ -270,6 +356,12 @@ func _restore_save() -> void:
 	GameState.from_dict(data)
 	if data.has("player_position") and _player:
 		_player.teleport(data["player_position"], data.get("player_yaw", 0.0))
+	# Restore which specific fragments were already collected.
+	var collected: Array = data.get("fragments_collected", [])
+	if collected.size() > 0:
+		for f in get_tree().get_nodes_in_group("fragment"):
+			if f.index in collected:
+				f.set_collected_silently()
 	# If we load into the First Layer, snap the palette/hidden layer on without
 	# replaying the transformation animation.
 	if GameState.world == GameState.World.FIRST_LAYER:
