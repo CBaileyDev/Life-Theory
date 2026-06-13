@@ -96,6 +96,8 @@ func get_prompt() -> String:
 		return "[E]  Touch the glowing mushroom"
 	if GameState.quest_step == GameState.Step.RETURN_SHRINE:
 		return "[E]  Commune with the shrine"
+	if GameState.quest_complete:
+		return "[E]  Essence Sanctum  (Essence: %d)" % GameState.forest_essence
 	return ""
 
 func interact(_player: Node) -> void:
@@ -104,6 +106,8 @@ func interact(_player: Node) -> void:
 		GameState.activate_mushroom()
 	elif GameState.quest_step == GameState.Step.RETURN_SHRINE:
 		GameState.reach_shrine()
+	elif GameState.quest_complete:
+		GameState.shop_requested.emit()
 
 func _on_world_changed(_state: int) -> void:
 	_refresh_glow()

@@ -22,6 +22,7 @@ func _ready() -> void:
 	layer = 8
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	GameState.upgrade_menu_requested.connect(open)
+	GameState.shop_requested.connect(open_shop)
 	visible = false
 
 func open() -> void:
@@ -52,7 +53,56 @@ func _build_choices() -> void:
 	for up in UPGRADES:
 		_panel_v.add_child(_make_card(up))
 
-func _make_card(up: Dictionary) -> Control:
+# ----------------------------------------------------------------- shop mode
+func open_shop() -> void:
+	visible = true
+	get_tree().paused = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_build_shop()
+
+func _build_shop() -> void:
+	_clear()
+	add_child(UITheme.fullscreen_dim())
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
+	var panel := UITheme.make_panel()
+	panel.custom_minimum_size = Vector2(640, 0)
+	center.add_child(panel)
+	_panel_v = VBoxContainer.new()
+	_panel_v.add_theme_constant_override("separation", 12)
+	panel.add_child(_panel_v)
+
+	_panel_v.add_child(UITheme.make_title("Essence Sanctum", 32))
+	_panel_v.add_child(UITheme.make_label(
+		"Spend Forest Essence to walk another path.    Essence: %d    (cost %d each)"
+		% [GameState.forest_essence, GameState.UPGRADE_COST], 15, UITheme.TEXT_DIM))
+	_panel_v.add_child(_spacer(8))
+
+	var any := false
+	for up in UPGRADES:
+		if GameState.has_upgrade(up["id"]):
+			continue
+		any = true
+		var card := _make_card(up, "Cost %d" % GameState.UPGRADE_COST, _buy.bind(up))
+		(card as Button).disabled = GameState.forest_essence < GameState.UPGRADE_COST
+		_panel_v.add_child(card)
+	if not any:
+		_panel_v.add_child(UITheme.make_label("Every path has been walked.", 18, UITheme.GOLD))
+
+	_panel_v.add_child(_spacer(8))
+	var close := UITheme.make_button("Close", 220)
+	close.pressed.connect(_close)
+	var cc := CenterContainer.new()
+	cc.add_child(close)
+	_panel_v.add_child(cc)
+
+func _buy(up: Dictionary) -> void:
+	if GameState.buy_upgrade(up["id"]):
+		GameState.toast.emit("Acquired: %s" % up["name"])
+		_build_shop()
+
+func _make_card(up: Dictionary, note := "", on_press := Callable()) -> Control:
 	var card := UITheme.make_button("", 600)
 	card.custom_minimum_size = Vector2(600, 78)
 	# Compose a rich label inside the button.
@@ -61,7 +111,8 @@ func _make_card(up: Dictionary) -> Control:
 	v.set_anchors_preset(Control.PRESET_FULL_RECT)
 	v.offset_left = 14
 	v.offset_top = 8
-	var name_l := UITheme.make_label(up["name"], 20, UITheme.GOLD)
+	var title: String = up["name"] if note == "" else "%s    —    %s" % [up["name"], note]
+	var name_l := UITheme.make_label(title, 20, UITheme.GOLD)
 	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var desc_l := UITheme.make_label(up["desc"], 15, UITheme.TEXT)
 	desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -70,7 +121,10 @@ func _make_card(up: Dictionary) -> Control:
 	v.add_child(name_l)
 	v.add_child(desc_l)
 	card.add_child(v)
-	card.pressed.connect(func(): _choose(up))
+	if on_press.is_valid():
+		card.pressed.connect(on_press)
+	else:
+		card.pressed.connect(func(): _choose(up))
 	return card
 
 func _choose(up: Dictionary) -> void:
@@ -98,17 +152,20 @@ func _show_confirmation(up: Dictionary) -> void:
 	v.add_child(l)
 	v.add_child(_spacer(8))
 	var cont := UITheme.make_button("Continue", 220)
-	cont.pressed.connect(_close)
+	cont.pressed.connect(_finish_initial)
 	var cc := CenterContainer.new()
 	cc.add_child(cont)
 	v.add_child(cc)
+
+func _finish_initial() -> void:
+	GameState.toast.emit("The first layer is revealed. Return to the shrine to spend Essence.")
+	_close()
 
 func _close() -> void:
 	AudioManager.play("ui_click")
 	get_tree().paused = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	visible = false
-	GameState.toast.emit("The first layer is revealed. Your journey begins.")
 	_clear()
 
 func _clear() -> void:

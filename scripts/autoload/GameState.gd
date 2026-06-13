@@ -36,6 +36,7 @@ signal player_damaged(amount: float)
 signal player_died
 signal dialogue_requested(speaker: String, lines: Array)
 signal upgrade_menu_requested
+signal shop_requested
 signal toast(text: String)
 
 # ----------------------------------------------------------------------- state
@@ -48,6 +49,8 @@ var mushroom_activated: bool = false
 var guide_met: bool = false
 var quest_complete: bool = false
 var selected_upgrade: String = ""
+var acquired_upgrades: Array = []
+const UPGRADE_COST := 60
 
 # Player stats (live here so they survive scene transitions / saves).
 var max_health: float = 100.0
@@ -69,6 +72,7 @@ func reset_run() -> void:
 	guide_met = false
 	quest_complete = false
 	selected_upgrade = ""
+	acquired_upgrades = []
 	max_health = 100.0
 	health = 100.0
 	sprint_multiplier = 1.0
@@ -131,8 +135,7 @@ func reach_shrine() -> bool:
 		return true
 	return false
 
-func choose_upgrade(id: String) -> void:
-	selected_upgrade = id
+func _apply_upgrade(id: String) -> void:
 	match id:
 		"heart_of_bark":
 			max_health += 60.0
@@ -144,9 +147,31 @@ func choose_upgrade(id: String) -> void:
 		"simulation_pulse":
 			magic_unlocked = true
 	health_changed.emit(health, max_health)
+
+func _grant_upgrade(id: String) -> void:
+	if acquired_upgrades.has(id):
+		return
+	acquired_upgrades.append(id)
+	_apply_upgrade(id)
+
+func has_upgrade(id: String) -> bool:
+	return acquired_upgrades.has(id)
+
+func choose_upgrade(id: String) -> void:
+	selected_upgrade = id
+	_grant_upgrade(id)
 	quest_complete = true
 	set_step(Step.COMPLETE)
 	AudioManager.play("upgrade_select")
+
+## Spend Forest Essence to acquire another upgrade. Returns true on success.
+func buy_upgrade(id: String) -> bool:
+	if has_upgrade(id) or forest_essence < UPGRADE_COST:
+		return false
+	forest_essence -= UPGRADE_COST
+	_grant_upgrade(id)
+	AudioManager.play("upgrade_select")
+	return true
 
 # ------------------------------------------------------------------- health
 func damage_player(amount: float) -> void:
@@ -181,6 +206,7 @@ func to_dict() -> Dictionary:
 		"guide_met": guide_met,
 		"quest_complete": quest_complete,
 		"selected_upgrade": selected_upgrade,
+		"acquired_upgrades": acquired_upgrades,
 		"max_health": max_health,
 		"health": health,
 		"sprint_multiplier": sprint_multiplier,
@@ -200,6 +226,7 @@ func from_dict(d: Dictionary) -> void:
 	guide_met = d.get("guide_met", guide_met)
 	quest_complete = d.get("quest_complete", quest_complete)
 	selected_upgrade = d.get("selected_upgrade", selected_upgrade)
+	acquired_upgrades = d.get("acquired_upgrades", acquired_upgrades)
 	max_health = d.get("max_health", max_health)
 	health = d.get("health", health)
 	sprint_multiplier = d.get("sprint_multiplier", sprint_multiplier)

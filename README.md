@@ -78,7 +78,9 @@ There is **no build step** and **no external dependency** to fetch.
    the Ancient Rootblade to destroy it (3 hits).
 8. **Return to the shrine** and press **E** to commune.
 9. **Choose your first upgrade** from four paths; it applies immediately.
-10. Pause anytime (**Esc**), change graphics quality, save/load, and explore.
+10. Afterwards, the shrine becomes an **Essence Sanctum** — spend Forest Essence
+    (earned by defeating wisps) to acquire the other upgrades.
+11. Pause anytime (**Esc**), open the **Journal** (Tab), change graphics, save/load.
 
 A passive **Luminous Stag** also roams the First Layer and flees if approached.
 The encounter now features **three Corrupted Wisps**; sprinting consumes
