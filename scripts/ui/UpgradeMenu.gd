@@ -67,28 +67,30 @@ func _build_shop() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 	var panel := UITheme.make_panel()
-	panel.custom_minimum_size = Vector2(640, 0)
+	panel.custom_minimum_size = Vector2(960, 0)
 	center.add_child(panel)
 	_panel_v = VBoxContainer.new()
-	_panel_v.add_theme_constant_override("separation", 12)
+	_panel_v.add_theme_constant_override("separation", 10)
 	panel.add_child(_panel_v)
 
-	_panel_v.add_child(UITheme.make_title("Essence Sanctum", 32))
+	_panel_v.add_child(UITheme.make_title("Essence Sanctum — Seeker Paths", 30))
 	_panel_v.add_child(UITheme.make_label(
-		"Spend Forest Essence to walk another path.    Essence: %d    (cost %d each)"
-		% [GameState.forest_essence, GameState.UPGRADE_COST], 15, UITheme.TEXT_DIM))
-	_panel_v.add_child(_spacer(8))
+		"Spend Forest Essence to walk the paths. Each node needs the one above it.    Essence: %d"
+		% GameState.forest_essence, 15, UITheme.TEXT_DIM))
+	_panel_v.add_child(_spacer(6))
 
-	var any := false
-	for up in UPGRADES:
-		if GameState.has_upgrade(up["id"]):
-			continue
-		any = true
-		var card := _make_card(up, "Cost %d" % GameState.UPGRADE_COST, _buy.bind(up))
-		(card as Button).disabled = GameState.forest_essence < GameState.UPGRADE_COST
-		_panel_v.add_child(card)
-	if not any:
-		_panel_v.add_child(UITheme.make_label("Every path has been walked.", 18, UITheme.GOLD))
+	# Four path columns, each a chain of nodes (top -> bottom).
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 14)
+	_panel_v.add_child(cols)
+	for path in SkillTree.PATHS:
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 8)
+		col.custom_minimum_size = Vector2(220, 0)
+		cols.add_child(col)
+		col.add_child(UITheme.make_label(path["name"], 17, UITheme.ACCENT))
+		for node in path["nodes"]:
+			col.add_child(_make_node_card(node))
 
 	_panel_v.add_child(_spacer(8))
 	var close := UITheme.make_button("Close", 220)
@@ -97,9 +99,43 @@ func _build_shop() -> void:
 	cc.add_child(close)
 	_panel_v.add_child(cc)
 
-func _buy(up: Dictionary) -> void:
-	if GameState.buy_upgrade(up["id"]):
-		GameState.toast.emit("Acquired: %s" % up["name"])
+func _make_node_card(node: Dictionary) -> Control:
+	var owned: bool = GameState.has_upgrade(node["id"])
+	var req: String = node["req"]
+	var locked: bool = req != "" and not GameState.has_upgrade(req)
+	var cost: int = node["cost"]
+	var affordable: bool = GameState.forest_essence >= cost
+	var note := ""
+	if owned:
+		note = "✓ Owned"
+	elif locked:
+		note = "Locked"
+	else:
+		note = "Cost %d" % cost
+	var card := UITheme.make_button("", 210)
+	card.custom_minimum_size = Vector2(210, 84)
+	var v := VBoxContainer.new()
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.set_anchors_preset(Control.PRESET_FULL_RECT)
+	v.offset_left = 10
+	v.offset_top = 6
+	var col := UITheme.GOLD if owned else (UITheme.TEXT_DIM if locked else UITheme.ACCENT)
+	var nl := UITheme.make_label("%s   —   %s" % [node["name"], note], 15, col)
+	nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var dl := UITheme.make_label(node["desc"], 13, UITheme.TEXT)
+	dl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dl.custom_minimum_size = Vector2(188, 0)
+	v.add_child(nl)
+	v.add_child(dl)
+	card.add_child(v)
+	card.disabled = owned or locked or not affordable
+	card.pressed.connect(_buy_node.bind(node))
+	return card
+
+func _buy_node(node: Dictionary) -> void:
+	if GameState.buy_node(node["id"], node["cost"], node["req"]):
+		GameState.toast.emit("Attuned: %s" % node["name"])
 		_build_shop()
 
 func _make_card(up: Dictionary, note := "", on_press := Callable()) -> Control:

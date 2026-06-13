@@ -63,6 +63,8 @@ var health: float = 100.0
 var sprint_multiplier: float = 1.0
 var melee_damage: float = 34.0          # 3 hits to kill a 100hp wisp
 var magic_unlocked: bool = false
+var magic_damage_mult: float = 1.0
+var damage_reduction: float = 0.0
 var forest_essence: int = 0             # optional resource
 var collected_ids: Array = []           # which fragment indices recovered
 
@@ -94,6 +96,8 @@ func reset_run() -> void:
 	sprint_multiplier = 1.0
 	melee_damage = 34.0
 	magic_unlocked = false
+	magic_damage_mult = 1.0
+	damage_reduction = 0.0
 	forest_essence = 0
 	collected_ids = []
 	sight_unlocked = false
@@ -174,6 +178,25 @@ func _apply_upgrade(id: String) -> void:
 			melee_damage += 40.0
 		"simulation_pulse":
 			magic_unlocked = true
+		"bark_skin":
+			max_health += 40.0
+			health = max_health
+		"ironwood":
+			max_health += 40.0
+			health = max_health
+			damage_reduction = clampf(damage_reduction + 0.15, 0.0, 0.8)
+		"fleetfoot":
+			sprint_multiplier = 1.9
+		"windstep":
+			sprint_multiplier = 2.2
+		"keen_edge":
+			melee_damage += 40.0
+		"grovecleaver":
+			melee_damage += 80.0
+		"pulse_power":
+			magic_damage_mult = 1.6
+		"pulse_storm":
+			magic_damage_mult = 2.2
 	health_changed.emit(health, max_health)
 
 func _grant_upgrade(id: String) -> void:
@@ -201,10 +224,24 @@ func buy_upgrade(id: String) -> bool:
 	AudioManager.play("upgrade_select")
 	return true
 
+## Buy a Seeker-Path node (honours prerequisite + cost). Returns true on success.
+func buy_node(id: String, cost: int, req: String) -> bool:
+	if has_upgrade(id):
+		return false
+	if req != "" and not has_upgrade(req):
+		return false
+	if forest_essence < cost:
+		return false
+	forest_essence -= cost
+	_grant_upgrade(id)
+	AudioManager.play("upgrade_select")
+	return true
+
 # ------------------------------------------------------------------- health
 func damage_player(amount: float) -> void:
 	if health <= 0.0:
 		return
+	amount *= (1.0 - damage_reduction)
 	health = maxf(health - amount, 0.0)
 	health_changed.emit(health, max_health)
 	player_damaged.emit(amount)
@@ -282,6 +319,8 @@ func to_dict() -> Dictionary:
 		"sprint_multiplier": sprint_multiplier,
 		"melee_damage": melee_damage,
 		"magic_unlocked": magic_unlocked,
+		"magic_damage_mult": magic_damage_mult,
+		"damage_reduction": damage_reduction,
 		"forest_essence": forest_essence,
 		"collected_ids": collected_ids,
 		"sight_unlocked": sight_unlocked,
@@ -306,6 +345,8 @@ func from_dict(d: Dictionary) -> void:
 	sprint_multiplier = d.get("sprint_multiplier", sprint_multiplier)
 	melee_damage = d.get("melee_damage", melee_damage)
 	magic_unlocked = d.get("magic_unlocked", magic_unlocked)
+	magic_damage_mult = d.get("magic_damage_mult", magic_damage_mult)
+	damage_reduction = d.get("damage_reduction", damage_reduction)
 	forest_essence = d.get("forest_essence", forest_essence)
 	collected_ids = d.get("collected_ids", collected_ids)
 	sight_unlocked = d.get("sight_unlocked", sight_unlocked)
