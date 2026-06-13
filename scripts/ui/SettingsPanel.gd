@@ -48,6 +48,20 @@ func _build() -> void:
 	resopt.item_selected.connect(func(i): SettingsManager.set_resolution_index(i))
 	v.add_child(_row("Resolution", resopt))
 
+	# Render scale (3D resolution)
+	var rs := HSlider.new()
+	rs.min_value = 0.5
+	rs.max_value = 1.0
+	rs.step = 0.05
+	rs.value = SettingsManager.render_scale
+	rs.custom_minimum_size = Vector2(220, 0)
+	var rs_val := UITheme.make_label("%d%%" % int(SettingsManager.render_scale * 100), 16, UITheme.TEXT_DIM)
+	var rs_cb := func(v2: float):
+		SettingsManager.set_render_scale(v2)
+		rs_val.text = "%d%%" % int(v2 * 100)
+	rs.value_changed.connect(rs_cb)
+	v.add_child(_row("Render Scale", rs, rs_val))
+
 	# Fullscreen
 	var fs := CheckBox.new()
 	fs.button_pressed = SettingsManager.fullscreen

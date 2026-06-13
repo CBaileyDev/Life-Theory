@@ -28,10 +28,12 @@ var third_person: bool = false
 var master_volume: float = 0.9
 var fov: float = 75.0
 var invert_y: bool = false
+var render_scale: float = 1.0   # 3D resolution scale (perf lever for weak HW)
 
 func _ready() -> void:
 	load_settings()
 	apply_window_settings()
+	get_viewport().scaling_3d_scale = render_scale
 	var bus := AudioServer.get_bus_index("Master")
 	AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(master_volume, 0.0001)))
 
@@ -43,6 +45,7 @@ func load_settings() -> void:
 	graphics_quality = cfg.get_value("video", "quality", graphics_quality)
 	fullscreen = cfg.get_value("video", "fullscreen", fullscreen)
 	resolution_index = cfg.get_value("video", "resolution_index", resolution_index)
+	render_scale = cfg.get_value("video", "render_scale", render_scale)
 	mouse_sensitivity = cfg.get_value("input", "mouse_sensitivity", mouse_sensitivity)
 	third_person = cfg.get_value("input", "third_person", third_person)
 	invert_y = cfg.get_value("input", "invert_y", invert_y)
@@ -54,6 +57,7 @@ func save_settings() -> void:
 	cfg.set_value("video", "quality", graphics_quality)
 	cfg.set_value("video", "fullscreen", fullscreen)
 	cfg.set_value("video", "resolution_index", resolution_index)
+	cfg.set_value("video", "render_scale", render_scale)
 	cfg.set_value("input", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("input", "third_person", third_person)
 	cfg.set_value("input", "invert_y", invert_y)
@@ -93,6 +97,11 @@ func set_fov(v: float) -> void:
 
 func set_invert_y(on: bool) -> void:
 	invert_y = on
+	save_settings()
+
+func set_render_scale(v: float) -> void:
+	render_scale = clampf(v, 0.5, 1.0)
+	get_viewport().scaling_3d_scale = render_scale
 	save_settings()
 
 func set_master_volume(v: float) -> void:

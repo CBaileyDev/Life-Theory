@@ -30,6 +30,9 @@ func _build() -> void:
 	tr.stretch_mode = TextureRect.STRETCH_SCALE
 	add_child(tr)
 
+	# Live 3D forest backdrop (drawn over the gradient fallback).
+	add_child(MenuBackdrop.new())
+
 	# Drifting fireflies for atmosphere.
 	var fireflies := CPUParticles2D.new()
 	fireflies.amount = 60
