@@ -14,6 +14,11 @@ var _toast_label: Label
 var _damage_vignette: ColorRect
 var _toast_tween: Tween
 var _health_tween: Tween
+var _stamina_fill: ColorRect
+var _crosshair: Control
+var _hitmarker: Label
+var _death_overlay: ColorRect
+var _death_label: Label
 
 func _ready() -> void:
 	add_to_group("hud")
@@ -94,6 +99,22 @@ func _build() -> void:
 	_health_fill.position = Vector2.ZERO
 	_health_fill.size = Vector2(220, 16)
 	bar_bg.add_child(_health_fill)
+	# Stamina bar (under health).
+	_stamina_fill = _make_sub_bar(hbox, "Stamina", Color(0.35, 0.6, 0.75))
+
+	# Crosshair (centre dot) + hitmarker.
+	_crosshair = ColorRect.new()
+	_crosshair.color = Color(0.9, 0.95, 0.95, 0.5)
+	_crosshair.custom_minimum_size = Vector2(4, 4)
+	_crosshair.size = Vector2(4, 4)
+	_crosshair.set_anchors_preset(Control.PRESET_CENTER)
+	_crosshair.position = Vector2(-2, -2)
+	root.add_child(_crosshair)
+	_hitmarker = UITheme.make_label("✕", 28, Color(1.0, 0.5, 0.5))
+	_hitmarker.set_anchors_preset(Control.PRESET_CENTER)
+	_hitmarker.position = Vector2(-10, -18)
+	_hitmarker.modulate.a = 0.0
+	root.add_child(_hitmarker)
 
 	# Interaction prompt (bottom-center).
 	_prompt_label = UITheme.make_label("", 18, UITheme.ACCENT)
@@ -109,10 +130,57 @@ func _build() -> void:
 	_toast_label.modulate.a = 0.0
 	root.add_child(_toast_label)
 
+	# Death overlay (hidden until the player falls).
+	_death_overlay = ColorRect.new()
+	_death_overlay.color = Color(0.02, 0.0, 0.02, 0.0)
+	_death_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_death_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_death_overlay)
+	_death_label = UITheme.make_title("The forest reclaims you...", 34)
+	_death_label.set_anchors_preset(Control.PRESET_CENTER)
+	_death_label.modulate.a = 0.0
+	root.add_child(_death_label)
+
+func _make_sub_bar(parent: VBoxContainer, label: String, color: Color) -> ColorRect:
+	parent.add_child(UITheme.make_label(label, 13, UITheme.TEXT_DIM))
+	var bg := ColorRect.new()
+	bg.color = Color(0.05, 0.07, 0.09, 0.9)
+	bg.custom_minimum_size = Vector2(220, 12)
+	parent.add_child(bg)
+	var fill := ColorRect.new()
+	fill.color = color
+	fill.position = Vector2.ZERO
+	fill.size = Vector2(220, 12)
+	bg.add_child(fill)
+	return fill
+
 # ------------------------------------------------------------------ external
 func set_prompt(text: String) -> void:
 	if _prompt_label:
 		_prompt_label.text = text
+
+func set_stamina(frac: float) -> void:
+	if _stamina_fill:
+		_stamina_fill.size.x = 220.0 * clampf(frac, 0.0, 1.0)
+
+func hitmarker() -> void:
+	if not _hitmarker:
+		return
+	_hitmarker.modulate.a = 1.0
+	_hitmarker.scale = Vector2(1.4, 1.4)
+	var t := create_tween().set_parallel(true)
+	t.tween_property(_hitmarker, "modulate:a", 0.0, 0.3)
+	t.tween_property(_hitmarker, "scale", Vector2.ONE, 0.3)
+
+func show_death() -> void:
+	var t := create_tween()
+	t.tween_property(_death_overlay, "color:a", 0.85, 0.4)
+	t.parallel().tween_property(_death_label, "modulate:a", 1.0, 0.4)
+
+func hide_death() -> void:
+	var t := create_tween()
+	t.tween_property(_death_overlay, "color:a", 0.0, 0.6)
+	t.parallel().tween_property(_death_label, "modulate:a", 0.0, 0.6)
 
 func show_toast(text: String) -> void:
 	_toast_label.text = text

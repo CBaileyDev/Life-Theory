@@ -16,6 +16,11 @@ const MOUSE_PITCH_MAX := 1.4
 const ATTACK_RANGE := 3.0
 const ATTACK_COOLDOWN := 0.45
 const FALL_RESET_Y := -25.0
+const STAMINA_MAX := 100.0
+const STAMINA_DRAIN := 24.0
+const STAMINA_REGEN := 16.0
+
+var _stamina := STAMINA_MAX
 
 var _yaw := 0.0
 var _pitch := 0.0
@@ -104,6 +109,13 @@ func _build_camera_rig() -> void:
 	ray.enabled = true
 	fp_camera.add_child(ray)
 
+	# Soft personal light so the First Layer stays readable at night.
+	var lantern := OmniLight3D.new()
+	lantern.light_color = Color(0.7, 0.82, 1.0)
+	lantern.light_energy = 0.55
+	lantern.omni_range = 12.0
+	head.add_child(lantern)
+
 func _build_weapon() -> void:
 	# The Ancient Rootblade: a simple stone/wood blade held at the lower-right.
 	weapon_pivot = Node3D.new()
@@ -191,7 +203,14 @@ func _physics_process(delta: float) -> void:
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var dir := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
 
-	var sprinting := Input.is_action_pressed("sprint") and input_dir.y < 0.0
+	var wants_sprint := Input.is_action_pressed("sprint") and input_dir.y < 0.0
+	var sprinting := wants_sprint and _stamina > 1.0
+	if sprinting:
+		_stamina = maxf(_stamina - STAMINA_DRAIN * delta, 0.0)
+	else:
+		_stamina = minf(_stamina + STAMINA_REGEN * delta, STAMINA_MAX)
+	if _hud and _hud.has_method("set_stamina"):
+		_hud.set_stamina(_stamina / STAMINA_MAX)
 	var target_speed := (SPRINT_SPEED * GameState.sprint_multiplier) if sprinting else WALK_SPEED
 	var horizontal := Vector3(velocity.x, 0, velocity.z)
 	if dir.length() > 0.01:
@@ -243,12 +262,16 @@ func _attack() -> void:
 	# Hit detection: nearest enemy inside a forward cone.
 	var origin := fp_camera.global_position
 	var forward := -fp_camera.global_transform.basis.z
+	var landed := false
 	for enemy in get_tree().get_nodes_in_group("enemy"):
 		if not (enemy is Node3D) or not enemy.has_method("take_damage"):
 			continue
 		var to: Vector3 = enemy.global_position - origin
 		if to.length() <= ATTACK_RANGE and forward.dot(to.normalized()) > 0.55:
 			enemy.take_damage(GameState.melee_damage, self)
+			landed = true
+	if landed and _hud and _hud.has_method("hitmarker"):
+		_hud.hitmarker()
 
 func _swing_weapon() -> void:
 	if not weapon_pivot.visible:
@@ -273,14 +296,19 @@ func _on_died() -> void:
 	# Brief delay then respawn at the last safe point (forgiving prototype).
 	if _hud and _hud.has_method("flash_damage"):
 		_hud.flash_damage(true)
-	await get_tree().create_timer(1.2).timeout
+	if _hud and _hud.has_method("show_death"):
+		_hud.show_death()
+	await get_tree().create_timer(1.6).timeout
 	_respawn()
 
 func _respawn() -> void:
 	teleport(_spawn_point, _yaw)
 	GameState.revive_full()
+	_stamina = STAMINA_MAX
 	if _hud and _hud.has_method("flash_damage"):
 		_hud.flash_damage(false)
+	if _hud and _hud.has_method("hide_death"):
+		_hud.hide_death()
 
 # --------------------------------------------------------------------- util
 func _first_in_group(g: String) -> Node:

@@ -154,11 +154,20 @@ func _face_player() -> void:
 
 func _do_attack() -> void:
 	_attack_timer = ATTACK_COOLDOWN
-	GameState.damage_player(ATTACK_DAMAGE)
-	# Quick lunge pulse.
+	# Telegraphed wind-up: swell, then strike. Damage only lands if the player
+	# is still in range, so the attack can be backed away from.
 	_core_mat.emission_energy_multiplier = 6.0
 	var t := create_tween()
-	t.tween_property(_core_mat, "emission_energy_multiplier", 3.0, 0.3)
+	t.tween_property(_core, "scale", Vector3(1.45, 1.45, 1.45), 0.22)
+	t.tween_callback(_strike)
+	t.tween_property(_core, "scale", Vector3.ONE, 0.22)
+	t.parallel().tween_property(_core_mat, "emission_energy_multiplier", 3.0, 0.3)
+
+func _strike() -> void:
+	if state == State.DEAD:
+		return
+	if _player and global_position.distance_to(_player.global_position) <= ATTACK_RANGE * 1.3:
+		GameState.damage_player(ATTACK_DAMAGE)
 
 func _clamp_hover(delta: float) -> void:
 	# Keep it floating near hover height with a gentle bob.
