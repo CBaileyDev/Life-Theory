@@ -15,6 +15,10 @@ var _damage_vignette: ColorRect
 var _toast_tween: Tween
 var _health_tween: Tween
 var _stamina_fill: ColorRect
+var _sight_box: VBoxContainer
+var _lucidity_fill: ColorRect
+var _desync_fill: ColorRect
+var _reagent_label: Label
 var _crosshair: Control
 var _hitmarker: Label
 var _death_overlay: ColorRect
@@ -27,6 +31,9 @@ func _ready() -> void:
 	GameState.fragments_changed.connect(_on_fragments_changed)
 	GameState.health_changed.connect(_on_health_changed)
 	GameState.toast.connect(show_toast)
+	GameState.lucidity_changed.connect(_on_lucidity_changed)
+	GameState.desync_changed.connect(_on_desync_changed)
+	GameState.reagents_changed.connect(_on_reagents_changed)
 	GameState.broadcast()
 
 func _build() -> void:
@@ -101,6 +108,14 @@ func _build() -> void:
 	bar_bg.add_child(_health_fill)
 	# Stamina bar (under health).
 	_stamina_fill = _make_sub_bar(hbox, "Stamina", Color(0.35, 0.6, 0.75))
+	# Sight meters (hidden until the Sight is unlocked).
+	_sight_box = VBoxContainer.new()
+	_sight_box.visible = false
+	hbox.add_child(_sight_box)
+	_lucidity_fill = _make_sub_bar(_sight_box, "Lucidity", Color(0.4, 0.85, 1.0))
+	_desync_fill = _make_sub_bar(_sight_box, "Desync", Color(0.9, 0.3, 0.7))
+	_reagent_label = UITheme.make_label("Lucid Caps  0    [Q] Sight  [R] use", 12, UITheme.GOLD)
+	_sight_box.add_child(_reagent_label)
 
 	# Crosshair (centre dot) + hitmarker.
 	_crosshair = ColorRect.new()
@@ -162,6 +177,24 @@ func set_prompt(text: String) -> void:
 func set_stamina(frac: float) -> void:
 	if _stamina_fill:
 		_stamina_fill.size.x = 220.0 * clampf(frac, 0.0, 1.0)
+
+func _on_lucidity_changed(lucidity: float, maxv: float) -> void:
+	if _lucidity_fill:
+		_lucidity_fill.size.x = 220.0 * clampf(lucidity / maxv, 0.0, 1.0)
+	_refresh_sight_vis()
+
+func _on_desync_changed(desync: float, maxv: float) -> void:
+	if _desync_fill:
+		_desync_fill.size.x = 220.0 * clampf(desync / maxv, 0.0, 1.0)
+
+func _on_reagents_changed(count: int) -> void:
+	if _reagent_label:
+		_reagent_label.text = "Lucid Caps  %d    [Q] Sight  [R] use" % count
+	_refresh_sight_vis()
+
+func _refresh_sight_vis() -> void:
+	if _sight_box:
+		_sight_box.visible = GameState.sight_unlocked
 
 func set_crosshair_active(active: bool) -> void:
 	if not _crosshair:

@@ -12,6 +12,8 @@ func _enter_tree() -> void:
 	_add_keys("jump", [KEY_SPACE])
 	_add_keys("sprint", [KEY_SHIFT])
 	_add_keys("interact", [KEY_E])
+	_add_keys("sight", [KEY_Q, KEY_F])
+	_add_keys("use_reagent", [KEY_R])
 	_add_keys("inventory", [KEY_TAB, KEY_I])
 	_add_keys("pause", [KEY_ESCAPE])
 	_add_keys("camera_toggle", [KEY_C])

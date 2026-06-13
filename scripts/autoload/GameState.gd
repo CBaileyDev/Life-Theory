@@ -34,6 +34,11 @@ signal fragments_changed(collected: int, total: int)
 signal health_changed(health: float, max_health: float)
 signal player_damaged(amount: float)
 signal player_died
+# The Sight (perceive the simulation). Fictional/mystical mechanic.
+signal sight_toggled(active: bool)
+signal lucidity_changed(lucidity: float, maxv: float)
+signal desync_changed(desync: float, maxv: float)
+signal reagents_changed(count: int)
 signal dialogue_requested(speaker: String, lines: Array)
 signal upgrade_menu_requested
 signal shop_requested
@@ -64,6 +69,17 @@ var collected_ids: Array = []           # which fragment indices recovered
 # Set by the main menu: tells the Forest scene whether to load a save on start.
 var pending_load: bool = false
 
+# ---- The Sight: a fictional, mystical way to perceive the simulation. ----
+# Lucidity is spent to hold the Sight; Desync rises while it is open and the
+# world "frays" if it maxes out. Lucid Caps (mushroom reagents) restore Lucidity.
+const MAX_LUCIDITY := 100.0
+const MAX_DESYNC := 100.0
+var sight_unlocked: bool = false
+var sight_active: bool = false
+var lucidity: float = 45.0
+var desync: float = 0.0
+var sight_reagents: int = 1
+
 func reset_run() -> void:
 	world = World.NATURAL
 	quest_step = Step.FIND_MUSHROOM
@@ -80,6 +96,11 @@ func reset_run() -> void:
 	magic_unlocked = false
 	forest_essence = 0
 	collected_ids = []
+	sight_unlocked = false
+	sight_active = false
+	lucidity = 45.0
+	desync = 0.0
+	sight_reagents = 1
 
 func record_fragment(id: int) -> void:
 	if not collected_ids.has(id):
@@ -91,6 +112,9 @@ func broadcast() -> void:
 	quest_step_changed.emit(quest_step, STEP_TEXT[quest_step])
 	fragments_changed.emit(fragments, FRAGMENT_TOTAL)
 	health_changed.emit(health, max_health)
+	lucidity_changed.emit(lucidity, MAX_LUCIDITY)
+	desync_changed.emit(desync, MAX_DESYNC)
+	reagents_changed.emit(sight_reagents)
 
 # -------------------------------------------------------------- quest control
 func set_step(step: int) -> void:
@@ -106,6 +130,8 @@ func activate_mushroom() -> void:
 	mushroom_activated = true
 	set_world(World.FIRST_LAYER)
 	set_step(Step.FOLLOW_TRAIL)
+	unlock_sight()
+	grant_reagents(2)
 
 func set_world(state: int) -> void:
 	world = state
@@ -122,6 +148,8 @@ func collect_fragment() -> void:
 	fragments_changed.emit(fragments, FRAGMENT_TOTAL)
 	AudioManager.play("fragment_pickup")
 	forest_essence += 10
+	grant_reagents(1)
+	add_lucidity(20.0)
 	if fragments >= FRAGMENT_TOTAL and quest_step == Step.COLLECT_FRAGMENTS:
 		set_step(Step.RETURN_SHRINE)
 		toast.emit("All fragments gathered. Return to the shrine.")
@@ -192,6 +220,48 @@ func revive_full() -> void:
 	health = max_health
 	health_changed.emit(health, max_health)
 
+# --------------------------------------------------------------------- sight
+func unlock_sight() -> void:
+	if sight_unlocked:
+		return
+	sight_unlocked = true
+	toast.emit("The Sight stirs.  [Q] to perceive the layer  ·  [R] Lucid Cap")
+
+func can_open_sight() -> bool:
+	return sight_unlocked and lucidity > 5.0 and desync < MAX_DESYNC
+
+func set_sight(active: bool) -> void:
+	if active and not can_open_sight():
+		return
+	if active == sight_active:
+		return
+	sight_active = active
+	sight_toggled.emit(sight_active)
+	AudioManager.play("magic_hum" if active else "ui_click", -8.0)
+
+func add_lucidity(amount: float) -> void:
+	lucidity = clampf(lucidity + amount, 0.0, MAX_LUCIDITY)
+	lucidity_changed.emit(lucidity, MAX_LUCIDITY)
+
+func add_desync(amount: float) -> void:
+	desync = clampf(desync + amount, 0.0, MAX_DESYNC)
+	desync_changed.emit(desync, MAX_DESYNC)
+
+func use_reagent() -> bool:
+	if sight_reagents <= 0:
+		return false
+	sight_reagents -= 1
+	reagents_changed.emit(sight_reagents)
+	add_lucidity(45.0)
+	add_desync(-20.0)
+	AudioManager.play("fragment_pickup", -4.0)
+	toast.emit("A Lucid Cap dissolves. Clarity returns.")
+	return true
+
+func grant_reagents(n: int) -> void:
+	sight_reagents += n
+	reagents_changed.emit(sight_reagents)
+
 # ------------------------------------------------------------------ dialogue
 func request_dialogue(speaker: String, lines: Array) -> void:
 	dialogue_requested.emit(speaker, lines)
@@ -214,6 +284,10 @@ func to_dict() -> Dictionary:
 		"magic_unlocked": magic_unlocked,
 		"forest_essence": forest_essence,
 		"collected_ids": collected_ids,
+		"sight_unlocked": sight_unlocked,
+		"lucidity": lucidity,
+		"desync": desync,
+		"sight_reagents": sight_reagents,
 	}
 
 func from_dict(d: Dictionary) -> void:
@@ -234,3 +308,7 @@ func from_dict(d: Dictionary) -> void:
 	magic_unlocked = d.get("magic_unlocked", magic_unlocked)
 	forest_essence = d.get("forest_essence", forest_essence)
 	collected_ids = d.get("collected_ids", collected_ids)
+	sight_unlocked = d.get("sight_unlocked", sight_unlocked)
+	lucidity = d.get("lucidity", lucidity)
+	desync = d.get("desync", desync)
+	sight_reagents = d.get("sight_reagents", sight_reagents)

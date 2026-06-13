@@ -123,6 +123,7 @@ func build(parent: Node3D) -> void:
 	_scatter_foliage(parent)
 	_build_trail(parent)
 	_build_runes(parent)
+	_build_sight_glyphs(parent)
 
 # -------------------------------------------------------------------- ground
 ## Sampleable terrain height. Flat in the clearing and along the entrance path,
@@ -322,6 +323,23 @@ func _build_runes(parent: Node3D) -> void:
 		# Face the centre of the clearing (node must be in-tree for look_at).
 		quad.look_at_from_position(pos, Vector3(0, pos.y, 0), Vector3.UP)
 		rune_quads.append(quad)
+
+# Hidden "truth-glyphs" — invisible until the player opens the Sight, then they
+# float through the trees as glowing marks of the simulation beneath.
+func _build_sight_glyphs(parent: Node3D) -> void:
+	var mat := MeshFactory.mat_emissive(Color(0.6, 0.95, 1.0, 0.9), 4.0, true)
+	for i in 18:
+		var p := _random_point()
+		var glyph := MeshInstance3D.new()
+		var qm := QuadMesh.new()
+		qm.size = Vector2(0.8, 0.8)
+		glyph.mesh = qm
+		glyph.material_override = mat
+		glyph.position = Vector3(p.x, height_at(p.x, p.z) + rng.randf_range(1.0, 3.0), p.z)
+		glyph.rotation.y = rng.randf_range(0.0, TAU)
+		glyph.visible = false
+		parent.add_child(glyph)
+		glyph.add_to_group("sight_only")
 
 # ---------------------------------------------------------------------- utils
 func _random_point() -> Vector3:
