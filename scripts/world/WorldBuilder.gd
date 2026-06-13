@@ -39,8 +39,8 @@ var trail_markers: Array[Node3D] = []
 var rune_quads: Array[MeshInstance3D] = []
 
 # Shared materials (created once).
-var _bark: StandardMaterial3D
-var _rock: StandardMaterial3D
+var _bark: Material
+var _rock: Material
 var _ground_mat: Material
 var _leaf_variants: Array = []
 var _bush_variants: Array = []
@@ -54,9 +54,10 @@ func _init(quality_density := 1.0) -> void:
 	_hnoise.frequency = 0.035
 	_hnoise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	_hnoise.fractal_octaves = 3
-	_bark = MeshFactory.mat_standard(Color(0.27, 0.20, 0.15), 0.9)
-	_rock = MeshFactory.mat_standard(Color(0.30, 0.33, 0.36), 0.85)
-	_ground_mat = MeshFactory.mat_ground(Color(0.13, 0.19, 0.10), Color(0.23, 0.18, 0.12))
+	# Scanned-PBR (CC0) materials with procedural fallback colours.
+	_bark = MeshFactory.mat_pbr("bark", 0.5, Color(0.27, 0.20, 0.15))
+	_rock = MeshFactory.mat_pbr("rock", 0.4, Color(0.30, 0.33, 0.36))
+	_ground_mat = MeshFactory.mat_pbr("ground", 0.12, Color(0.13, 0.19, 0.10))
 	# Several green variants give the canopy/foliage natural colour variation.
 	for c in [Color(0.12, 0.26, 0.15), Color(0.15, 0.30, 0.17),
 			Color(0.10, 0.22, 0.13), Color(0.17, 0.32, 0.16)]:

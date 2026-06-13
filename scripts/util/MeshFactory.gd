@@ -34,6 +34,26 @@ static func mat_foliage(color: Color, strength := 0.15, rough := 0.92) -> Materi
 	m.set_shader_parameter("sway_strength", strength)
 	return m
 
+## Scanned-PBR triplanar material from the CC0 texture sets in assets/textures/
+## (<prefix>_albedo/_normal/_rough .jpg). Falls back to a flat colour if the
+## textures are not installed, so the project always runs.
+static func mat_pbr(prefix: String, scale := 1.0, fallback := Color(0.5, 0.5, 0.5)) -> Material:
+	var base := "res://assets/textures/" + prefix
+	if not ResourceLoader.exists(base + "_albedo.jpg"):
+		return mat_standard(fallback, 1.0)
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load(base + "_albedo.jpg")
+	if ResourceLoader.exists(base + "_normal.jpg"):
+		m.normal_enabled = true
+		m.normal_texture = load(base + "_normal.jpg")
+		m.normal_scale = 1.0
+	if ResourceLoader.exists(base + "_rough.jpg"):
+		m.roughness_texture = load(base + "_rough.jpg")
+	m.roughness = 1.0
+	m.uv1_triplanar = true
+	m.uv1_scale = Vector3(scale, scale, scale)
+	return m
+
 static func mat_ground(moss: Color, dirt: Color) -> Material:
 	var sh := _ground()
 	if sh == null:

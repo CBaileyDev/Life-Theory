@@ -70,20 +70,31 @@ func _ambient_tick() -> void:
 func _build_environment() -> void:
 	var we := WorldEnvironment.new()
 	_env = Environment.new()
-	# Procedural sky for a soft forest-dusk horizon and nicer depth.
-	_sky_mat = ProceduralSkyMaterial.new()
-	_sky_mat.sky_top_color = Color(0.10, 0.16, 0.22)
-	_sky_mat.sky_horizon_color = Color(0.30, 0.34, 0.30)
-	_sky_mat.ground_horizon_color = Color(0.16, 0.18, 0.15)
-	_sky_mat.ground_bottom_color = Color(0.06, 0.08, 0.06)
-	_sky_mat.sun_angle_max = 30.0
 	var sky := Sky.new()
-	sky.sky_material = _sky_mat
+	# Real image-based lighting: a CC0 HDRI panorama lights and reflects on the
+	# whole scene (the biggest realism lever). Falls back to a procedural sky.
+	var hdr_path := "res://assets/hdri/forest_sky.hdr"
+	if ResourceLoader.exists(hdr_path):
+		var psm := PanoramaSkyMaterial.new()
+		psm.panorama = load(hdr_path)
+		sky.sky_material = psm
+		_sky_mat = null
+		_env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+		_env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+		_env.ambient_light_energy = 1.0
+	else:
+		_sky_mat = ProceduralSkyMaterial.new()
+		_sky_mat.sky_top_color = Color(0.10, 0.16, 0.22)
+		_sky_mat.sky_horizon_color = Color(0.30, 0.34, 0.30)
+		_sky_mat.ground_horizon_color = Color(0.16, 0.18, 0.15)
+		_sky_mat.ground_bottom_color = Color(0.06, 0.08, 0.06)
+		_sky_mat.sun_angle_max = 30.0
+		sky.sky_material = _sky_mat
+		_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		_env.ambient_light_color = Color(0.35, 0.42, 0.40)
+		_env.ambient_light_energy = 0.6
 	_env.sky = sky
 	_env.background_mode = Environment.BG_SKY
-	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	_env.ambient_light_color = Color(0.35, 0.42, 0.40)
-	_env.ambient_light_energy = 0.6
 	_env.fog_enabled = true
 	_env.fog_light_color = Color(0.45, 0.55, 0.52)
 	_env.fog_density = 0.018
@@ -327,6 +338,7 @@ func _apply_magical_palette() -> void:
 	t.tween_property(_env, "fog_light_color", Color(0.35, 0.42, 0.62), 1.0)
 	t.tween_property(_env, "fog_density", 0.028, 1.0)
 	t.tween_property(_env, "ambient_light_color", Color(0.30, 0.36, 0.52), 1.0)
+	t.tween_property(_env, "ambient_light_energy", 0.55, 1.5)
 	if _sky_mat:
 		t.tween_property(_sky_mat, "sky_top_color", Color(0.10, 0.06, 0.20), 1.5)
 		t.tween_property(_sky_mat, "sky_horizon_color", Color(0.24, 0.20, 0.42), 1.5)
