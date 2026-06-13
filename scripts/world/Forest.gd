@@ -10,6 +10,7 @@ const HUDScript := preload("res://scripts/ui/HUD.gd")
 const DialogueScript := preload("res://scripts/ui/DialogueBox.gd")
 const PauseScript := preload("res://scripts/ui/PauseMenu.gd")
 const UpgradeScript := preload("res://scripts/ui/UpgradeMenu.gd")
+const JournalScript := preload("res://scripts/ui/Journal.gd")
 
 var _env: Environment
 var _dir: DirectionalLight3D
@@ -154,6 +155,7 @@ func _build_ui() -> void:
 	add_child(HUDScript.new())
 	add_child(DialogueScript.new())
 	add_child(UpgradeScript.new())
+	add_child(JournalScript.new())
 	add_child(PauseScript.new())
 
 func _build_transition_overlay() -> void:

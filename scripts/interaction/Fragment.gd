@@ -58,6 +58,7 @@ func _on_world_changed(state: int) -> void:
 ## Mark as already-collected on load, without re-incrementing the counter.
 func set_collected_silently() -> void:
 	collected = true
+	GameState.record_fragment(index)
 	_set_active(false)
 
 func _on_body_entered(body: Node) -> void:
@@ -65,6 +66,7 @@ func _on_body_entered(body: Node) -> void:
 		return
 	collected = true
 	_set_active(false)
+	GameState.record_fragment(index)
 	GameState.collect_fragment()
 	# Reveal a fragment of the mystery (atmospheric lore line).
 	GameState.request_dialogue("", Content.FRAGMENT_LINES[clampi(index, 0, 2)])

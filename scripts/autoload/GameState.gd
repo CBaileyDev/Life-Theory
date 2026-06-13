@@ -56,6 +56,7 @@ var sprint_multiplier: float = 1.0
 var melee_damage: float = 34.0          # 3 hits to kill a 100hp wisp
 var magic_unlocked: bool = false
 var forest_essence: int = 0             # optional resource
+var collected_ids: Array = []           # which fragment indices recovered
 
 # Set by the main menu: tells the Forest scene whether to load a save on start.
 var pending_load: bool = false
@@ -74,6 +75,11 @@ func reset_run() -> void:
 	melee_damage = 34.0
 	magic_unlocked = false
 	forest_essence = 0
+	collected_ids = []
+
+func record_fragment(id: int) -> void:
+	if not collected_ids.has(id):
+		collected_ids.append(id)
 
 # Emit current state so freshly-spawned UI shows the right thing.
 func broadcast() -> void:
@@ -181,6 +187,7 @@ func to_dict() -> Dictionary:
 		"melee_damage": melee_damage,
 		"magic_unlocked": magic_unlocked,
 		"forest_essence": forest_essence,
+		"collected_ids": collected_ids,
 	}
 
 func from_dict(d: Dictionary) -> void:
@@ -199,3 +206,4 @@ func from_dict(d: Dictionary) -> void:
 	melee_damage = d.get("melee_damage", melee_damage)
 	magic_unlocked = d.get("magic_unlocked", magic_unlocked)
 	forest_essence = d.get("forest_essence", forest_essence)
+	collected_ids = d.get("collected_ids", collected_ids)

@@ -200,6 +200,8 @@ func take_damage(amount: float, source) -> void:
 func _die() -> void:
 	state = State.DEAD
 	AudioManager.play("wisp_death")
+	GameState.forest_essence += 15
+	GameState.toast.emit("Corrupted Wisp dissolved.  +15 Essence")
 	_spawn_death_burst()
 	var t := create_tween()
 	t.tween_property(self, "scale", Vector3.ZERO, 0.4)
