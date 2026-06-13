@@ -55,14 +55,20 @@ objective; the fragment counter appears once collection begins.
 
 ## Combat & progression
 - **Ancient Rootblade** (melee): Left-Click, ~0.45s cadence, cone hit detection,
-  34 dmg (kills a 100-HP wisp in 3 hits).
-- **Corrupted Wisp**: floating AI — patrols, detects within 14 m, chases, attacks
-  for 12 dmg on a ~1.1 s cadence within 2.2 m, dies with a particle burst.
+  34 dmg (kills a 100-HP wisp in 3 hits). Landed hits flash a hitmarker; hits
+  show floating damage numbers and knock the wisp back.
+- **Corrupted Wisp** (×3 in the encounter): floating AI — patrols, detects within
+  14 m, chases, then a **telegraphed wind-up** strike for 12 dmg that only lands
+  if the player is still close (dodgeable); dies with a particle burst and drops
+  **+15 Forest Essence**.
+- **Sprint stamina**: sprinting drains stamina; it regenerates when not.
 - **Upgrades** (choose one): Heart of Bark (+60 max HP), Fleet of the Hidden Path
   (1.6× sprint), Rootblade Strength (+40 melee), Simulation Pulse (unlocks the
   Right-Click magic projectile, 45 dmg).
 
 ## UI
-Dark-fantasy, minimal, glowing accents (`UITheme`): Main Menu, Settings, Pause,
-Quest HUD, Fragment counter, Health bar, Interaction prompt, Dialogue box,
-Upgrade selection, transient toasts.
+Dark-fantasy, minimal, glowing accents (`UITheme`): Main Menu (with a live 3D
+forest backdrop), Settings, Pause, Quest HUD, Fragment counter, Health + Stamina
+bars, crosshair + hitmarker, vignette, Interaction prompt, typewriter Dialogue
+box, Upgrade selection, **Journal** (Tab: objective, recovered lore, seeker
+stats), death overlay, and transient toasts.

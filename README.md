@@ -56,7 +56,7 @@ There is **no build step** and **no external dependency** to fetch.
 | Attack (Rootblade) | **Left Mouse** |
 | Cast Simulation Pulse *(after upgrade)* | **Right Mouse** |
 | Toggle camera (1st/3rd person) | **C** |
-| Inventory / menu action | **Tab** / **I** |
+| Journal / Inventory | **Tab** / **I** |
 | Pause | **Esc** |
 | Quick save / load | **F5** / **F9** |
 
@@ -81,6 +81,21 @@ There is **no build step** and **no external dependency** to fetch.
 10. Pause anytime (**Esc**), change graphics quality, save/load, and explore.
 
 A passive **Luminous Stag** also roams the First Layer and flees if approached.
+The encounter now features **three Corrupted Wisps**; sprinting consumes
+**stamina**; hits show **damage numbers** and a **hitmarker**; collected fragments
+and seeker stats are logged in the **Journal** (Tab); defeated wisps drop
+**Forest Essence**.
+
+### Extra polish in this build
+
+- Rolling **terrain** (flat in the clearing/path) with everything placed on the
+  surface; **wind-swayed foliage**; procedural **moss/dirt ground**.
+- A live **3D forest backdrop** behind the main menu.
+- **Volumetric light shafts** (High), colour grading, vignette, and a **title
+  card** + sky/fog shift at the transformation.
+- **Camera shake** and a **death overlay** on hits; **objective beacon**;
+  **typewriter** dialogue; ambient **birdsong/wind**.
+- Procedurally-synthesized **audio** (no shipped files) for every cue + ambience.
 
 ---
 
@@ -101,10 +116,10 @@ procedural moss/dirt **ground shader**, and **wind-swayed foliage**.
 
 \* Foliage/tree density is chosen when the forest is built. Changing quality
 mid-run updates lighting/AA instantly; the new density takes effect next time
-you enter the forest. Also configurable: **mouse sensitivity, field of view,
-invert-Y look, master volume, fullscreen toggle, resolution selector, and
-third-person camera toggle**. All settings persist to `user://settings.cfg`
-(cross-platform).
+you enter the forest. Also configurable: **render scale (50–100%, a perf lever
+for weak hardware), mouse sensitivity, field of view, invert-Y look, master
+volume, fullscreen toggle, resolution selector, and third-person camera
+toggle**. All settings persist to `user://settings.cfg` (cross-platform).
 
 ### Navigation aids
 
@@ -182,16 +197,19 @@ scripts/
     Forest.gd            # level orchestration + transformation + graphics
   interaction/
     MushroomShrine.gd    # the artifact + shrine (interactable)
-    Fragment.gd          # collectible Fragments of Truth
+    Fragment.gd          # collectible Fragments of Truth (+ lore)
   entities/
-    Auralis.gd           # the guide spirit + dialogue
-    CorruptedWisp.gd     # hostile creature AI (idle/chase/attack/death)
+    Auralis.gd           # the guide spirit + dialogue + aura
+    CorruptedWisp.gd     # hostile AI (idle/chase/telegraphed attack/death)
     LuminousStag.gd      # passive ambient creature
-  combat/Projectile.gd   # Simulation Pulse magic projectile
-  ui/                    # MainMenu, HUD, DialogueBox, PauseMenu, UpgradeMenu,
-                         # SettingsPanel, UITheme (dark-fantasy styling)
-  util/MeshFactory.gd    # primitive mesh + material factory
+  combat/
+    Projectile.gd        # Simulation Pulse magic projectile
+    DamageNumber.gd      # floating combat numbers
+  ui/                    # MainMenu, MenuBackdrop (3D), HUD, DialogueBox,
+                         # PauseMenu, UpgradeMenu, Journal, SettingsPanel, UITheme
+  util/MeshFactory.gd    # primitive mesh + material/aura factory
   util/SfxSynth.gd       # procedural 16-bit PCM sfx + ambience synthesis
+  util/Content.gd        # all narrative strings (lore/dialogue)
 shaders/
   screen_transition.gdshader  # transformation distortion/flash (canvas_item)
   rune_glow.gdshader          # pulsing tree runes (spatial)
