@@ -133,6 +133,25 @@ static func sfx(name: String) -> AudioStreamWAV:
 			# Generic soft blip for any unlisted cue.
 			return _wav(tone(0.08, 440.0, -1.0, [1.0], false, 0.0, 0.06, 0.3))
 
+## An ~8s looping music theme: detuned drone pad + a slow sparse melody.
+## "calm" (major-ish, the natural forest) vs "layer" (darker minor, the First
+## Layer). Procedural — a placeholder score; drop real music in audio/ to override.
+static func music(name: String) -> AudioStreamWAV:
+	var dur := 8.0
+	var minor := name == "layer"
+	var root := 110.0 if minor else 130.81
+	var pad := _mix(
+		tone(dur, root, -1.0, [1.0, 0.3], false, 0.0, 1.4, 1.4, 0.13),
+		tone(dur, root * 1.498, -1.0, [1.0, 0.25], false, 0.0, 1.4, 1.4, 0.09))
+	var scale := [0, 3, 5, 7, 10, 12] if minor else [0, 2, 4, 7, 9, 12]
+	var melroot := root * 2.0
+	var mel := PackedFloat32Array()
+	for i in 8:
+		var semi: int = scale[(i * 2) % scale.size()]
+		var f := melroot * pow(2.0, semi / 12.0)
+		mel.append_array(tone(1.0, f, -1.0, [1.0, 0.5, 0.25], false, 0.0, 0.02, 0.85, 0.10))
+	return _wav(_mix(pad, mel), true)
+
 ## A gentle ~4s looping forest pad: low detuned drones + a slow airy noise bed.
 static func ambience() -> AudioStreamWAV:
 	var dur := 4.0

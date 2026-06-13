@@ -48,6 +48,7 @@ func _ready() -> void:
 		GameState.broadcast()
 		GameState.toast.emit("A quiet forest. A narrow trail. Something glows ahead.")
 	AudioManager.play_ambience("forest_day")
+	AudioManager.play_music("layer" if GameState.world == GameState.World.FIRST_LAYER else "calm")
 	_start_ambient_life()
 
 # Occasional birdsong / wind gusts layered over the ambience bed.
@@ -285,6 +286,7 @@ func _on_world_changed(state: int) -> void:
 
 func _play_transformation() -> void:
 	_transformed = true
+	AudioManager.play_music("layer")
 	AudioManager.play("mushroom_transform")
 	AudioManager.play("magic_hum", -4.0)
 	_burst_at_shrine()

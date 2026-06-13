@@ -17,6 +17,8 @@ const POOL_SIZE := 12
 var _pool: Array[AudioStreamPlayer] = []
 var _next := 0
 var _ambience: AudioStreamPlayer
+var _music: AudioStreamPlayer
+var _music_name := ""
 var _cache: Dictionary = {}
 
 # Catalogue of every cue the game references. Keeps the design contract in one
@@ -38,6 +40,10 @@ func _ready() -> void:
 	_ambience.bus = "Master"
 	_ambience.volume_db = -6.0
 	add_child(_ambience)
+	_music = AudioStreamPlayer.new()
+	_music.bus = "Master"
+	_music.volume_db = -40.0
+	add_child(_music)
 
 func _find(dirs: Array, name: String) -> AudioStream:
 	if _cache.has(name):
@@ -91,3 +97,27 @@ func _synth_ambience() -> AudioStream:
 
 func stop_ambience() -> void:
 	_ambience.stop()
+
+# ------------------------------------------------------------- adaptive music
+## Crossfade to a procedural (or installed) music theme by name ("calm"/"layer").
+func play_music(name: String) -> void:
+	if name == _music_name:
+		return
+	_music_name = name
+	var stream := _find(AMB_DIRS, "music_" + name)
+	if stream == null and not _synth_cache.has("mus_" + name):
+		_synth_cache["mus_" + name] = SfxSynth.music(name)
+	if stream == null:
+		stream = _synth_cache["mus_" + name]
+	var swap := func():
+		_music.stream = stream
+		_music.play()
+	var t := create_tween()
+	if _music.playing:
+		t.tween_property(_music, "volume_db", -40.0, 1.0)
+		t.tween_callback(swap)
+		t.tween_property(_music, "volume_db", -13.0, 1.6)
+	else:
+		swap.call()
+		_music.volume_db = -40.0
+		t.tween_property(_music, "volume_db", -13.0, 1.6)
