@@ -118,27 +118,33 @@ func _build_fireflies() -> void:
 	add_child(_fireflies)
 
 # --------------------------------------------------------------- entities
+func _on_ground(pos: Vector3, lift := 0.0) -> Vector3:
+	return Vector3(pos.x, _world.height_at(pos.x, pos.z) + lift, pos.z)
+
 func _place_entities(root: Node3D) -> void:
 	var shrine := MushroomShrine.new()
-	shrine.position = WorldBuilder.SHRINE_POS
+	shrine.position = _on_ground(WorldBuilder.SHRINE_POS)
 	root.add_child(shrine)
 
 	var auralis := Auralis.new()
-	auralis.position = WorldBuilder.AURALIS_POS
+	auralis.position = _on_ground(WorldBuilder.AURALIS_POS)
 	root.add_child(auralis)
 
-	var wisp := CorruptedWisp.new()
-	wisp.position = WorldBuilder.WISP_HOME
-	root.add_child(wisp)
+	# A small pack of wisps makes the encounter a real fight.
+	var wisp_offsets := [Vector3.ZERO, Vector3(4, 0, 2), Vector3(-3, 0, 4)]
+	for off in wisp_offsets:
+		var wisp := CorruptedWisp.new()
+		wisp.position = _on_ground(WorldBuilder.WISP_HOME + off)
+		root.add_child(wisp)
 
 	var stag := LuminousStag.new()
-	stag.position = WorldBuilder.STAG_POS
+	stag.position = _on_ground(WorldBuilder.STAG_POS, 0.5)
 	root.add_child(stag)
 
 	var fi := 0
 	for fp in WorldBuilder.FRAGMENT_POS:
 		var frag := Fragment.new()
-		frag.position = fp
+		frag.position = _on_ground(fp)
 		frag.index = fi
 		root.add_child(frag)
 		fi += 1
@@ -201,7 +207,7 @@ func _process(delta: float) -> void:
 		_beacon.visible = false
 		return
 	_beacon.visible = true
-	_beacon.global_position = Vector3(pos.x, 0.0, pos.z)
+	_beacon.global_position = Vector3(pos.x, _world.height_at(pos.x, pos.z), pos.z)
 	var tt := Time.get_ticks_msec() / 1000.0
 	_beacon_diamond.position.y = 2.4 + sin(tt * 2.0) * 0.25
 	_beacon_diamond.rotation.y += delta * 2.0
@@ -235,8 +241,9 @@ func _nearest_fragment():
 func _spawn_player() -> void:
 	_player = PlayerScript.new()
 	add_child(_player)
-	_player.teleport(WorldBuilder.SPAWN, 0.0)  # yaw 0 -> forward is -Z, toward the clearing
-	_player.set_spawn(WorldBuilder.SPAWN)
+	var spawn := _on_ground(WorldBuilder.SPAWN, 1.5)
+	_player.teleport(spawn, 0.0)  # yaw 0 -> forward is -Z, toward the clearing
+	_player.set_spawn(spawn)
 
 # --------------------------------------------------------- transformation
 func _on_world_changed(state: int) -> void:
@@ -261,7 +268,32 @@ func _play_transformation() -> void:
 	t.tween_callback(_reveal_hidden)
 	t.tween_interval(0.1)
 	t.tween_method(_set_transition, 1.0, 0.0, 1.3)
-	t.tween_callback(func(): GameState.toast.emit("The First Layer awakens..."))
+	t.tween_callback(_show_title_card)
+
+func _show_title_card() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 9
+	add_child(layer)
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.modulate.a = 0.0
+	layer.add_child(root)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(center)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	center.add_child(v)
+	v.add_child(UITheme.make_title("THE FIRST LAYER", 60))
+	var sub := UITheme.make_title(Content.TITLE_CARD_SUB, 20)
+	sub.add_theme_color_override("font_color", UITheme.TEXT_DIM)
+	v.add_child(sub)
+	var t := create_tween()
+	t.tween_property(root, "modulate:a", 1.0, 0.9)
+	t.tween_interval(2.4)
+	t.tween_property(root, "modulate:a", 0.0, 1.1)
+	t.tween_callback(layer.queue_free)
 
 func _set_transition(v: float) -> void:
 	if _transition_mat:

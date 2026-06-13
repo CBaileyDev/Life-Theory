@@ -6,20 +6,6 @@ extends StaticBody3D
 ## transformation. Floats gently and offers short, atmospheric dialogue that
 ## advances the quest the first time the player speaks to it.
 
-const FIRST_LINES := [
-	"You can see it now.",
-	"The forest is not the world. It is the first layer.",
-	"Three fragments of truth remain near this clearing. Bring them to the shrine.",
-	"When the pattern is whole, you may choose what kind of seeker you become.",
-]
-const REPEAT_LINES := [
-	"The fragments hum. Gather them, seeker.",
-	"Patterns within patterns. Keep looking.",
-]
-const DONE_LINES := [
-	"You have begun to see. This was only the first layer.",
-]
-
 var _body_root: Node3D
 var _spin := 0.0
 
@@ -59,6 +45,11 @@ func _build() -> void:
 	light.omni_range = 8.0
 	light.position.y = 1.6
 	_body_root.add_child(light)
+
+	# Drifting motes of light.
+	var aura := MeshFactory.make_aura(Color(0.55, 0.92, 1.0), 30, 0.5, 1.0, 0.08)
+	aura.position.y = 1.2
+	_body_root.add_child(aura)
 
 	# Interaction collision.
 	var col := CollisionShape3D.new()
@@ -105,10 +96,11 @@ func get_prompt() -> String:
 func interact(_player: Node) -> void:
 	var lines: Array
 	if not GameState.guide_met:
-		lines = FIRST_LINES
+		lines = Content.AURALIS_FIRST
 	elif GameState.quest_complete:
-		lines = DONE_LINES
+		lines = Content.AURALIS_DONE
 	else:
-		lines = REPEAT_LINES
+		# Hint scales with how many fragments remain.
+		lines = Content.AURALIS_HINTS[clampi(GameState.fragments, 0, 2)]
 	GameState.request_dialogue("Auralis", lines)
 	GameState.meet_guide()

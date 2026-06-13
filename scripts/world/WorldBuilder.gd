@@ -12,6 +12,13 @@ const AREA := 24.0          # half-extent of the playable square
 const CLEARING_RADIUS := 9.5
 const PATH_HALF_WIDTH := 2.6
 
+# Terrain: gentle rolling hills that flatten toward the clearing and the path
+# so gameplay space stays readable.
+const HEIGHT_AMP := 2.4
+const FLAT_RADIUS := 10.5    # fully flat inside this radius
+const BLEND_RADIUS := 18.0   # full height beyond this radius
+var _hnoise: FastNoiseLite
+
 # Key locations (shared with the Forest controller for entity placement).
 const SPAWN := Vector3(0, 2.0, 18.0)
 const SHRINE_POS := Vector3(0, 0, -2.0)
@@ -42,6 +49,11 @@ var _grass_variants: Array = []
 func _init(quality_density := 1.0) -> void:
 	density = quality_density
 	rng.seed = WORLD_SEED
+	_hnoise = FastNoiseLite.new()
+	_hnoise.seed = WORLD_SEED
+	_hnoise.frequency = 0.035
+	_hnoise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	_hnoise.fractal_octaves = 3
 	_bark = MeshFactory.mat_standard(Color(0.27, 0.20, 0.15), 0.9)
 	_rock = MeshFactory.mat_standard(Color(0.30, 0.33, 0.36), 0.85)
 	_ground_mat = MeshFactory.mat_ground(Color(0.13, 0.19, 0.10), Color(0.23, 0.18, 0.12))
@@ -68,23 +80,48 @@ func build(parent: Node3D) -> void:
 	_build_runes(parent)
 
 # -------------------------------------------------------------------- ground
+## Sampleable terrain height. Flat in the clearing and along the entrance path,
+## rolling toward the edges. Used both to build the mesh and to drop every
+## object/entity onto the surface.
+func height_at(x: float, z: float) -> float:
+	var d := Vector2(x, z).length()
+	var radial := clampf((d - FLAT_RADIUS) / (BLEND_RADIUS - FLAT_RADIUS), 0.0, 1.0)
+	# Flatten the entrance path corridor as well.
+	if z > -1.0 and z < 19.0:
+		var pflat := clampf((absf(x) - (PATH_HALF_WIDTH + 1.0)) / 3.0, 0.0, 1.0)
+		radial = minf(radial, pflat)
+	return _hnoise.get_noise_2d(x, z) * HEIGHT_AMP * radial
+
 func _build_ground(parent: Node3D) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var half := AREA + 4.0
+	var step := 1.6
+	var cols := int((half * 2.0) / step)
+	for ix in cols:
+		for iz in cols:
+			var x0 := -half + ix * step
+			var z0 := -half + iz * step
+			var x1 := x0 + step
+			var z1 := z0 + step
+			var v00 := Vector3(x0, height_at(x0, z0), z0)
+			var v10 := Vector3(x1, height_at(x1, z0), z0)
+			var v01 := Vector3(x0, height_at(x0, z1), z1)
+			var v11 := Vector3(x1, height_at(x1, z1), z1)
+			st.add_vertex(v00); st.add_vertex(v01); st.add_vertex(v11)
+			st.add_vertex(v00); st.add_vertex(v11); st.add_vertex(v10)
+	st.generate_normals()
+	var mesh := st.commit()
+
 	var mi := MeshInstance3D.new()
 	mi.name = "Ground"
-	var pm := PlaneMesh.new()
-	pm.size = Vector2(AREA * 2.4, AREA * 2.4)
-	pm.subdivide_width = 8
-	pm.subdivide_depth = 8
-	mi.mesh = pm
+	mi.mesh = mesh
 	mi.material_override = _ground_mat
 	parent.add_child(mi)
 
 	var body := StaticBody3D.new()
 	var col := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(AREA * 2.4, 1.0, AREA * 2.4)
-	col.shape = shape
-	col.position.y = -0.5
+	col.shape = mesh.create_trimesh_shape()
 	body.add_child(col)
 	parent.add_child(body)
 
@@ -129,6 +166,7 @@ func _scatter_trees(parent: Node3D) -> void:
 		var p := _random_point()
 		if _in_clearing(p) or _on_path(p):
 			continue
+		p.y = height_at(p.x, p.z)
 		var tree := MeshFactory.make_tree(rng, _bark, _pick(_leaf_variants))
 		tree.position = p
 		parent.add_child(tree)
@@ -140,6 +178,7 @@ func _scatter_rocks(parent: Node3D) -> void:
 		var p := _random_point()
 		if _on_path(p):
 			continue
+		p.y = height_at(p.x, p.z)
 		var rock := MeshFactory.make_rock(rng, _rock)
 		rock.position = p
 		parent.add_child(rock)
@@ -150,12 +189,14 @@ func _scatter_foliage(parent: Node3D) -> void:
 		var p := _random_point()
 		if _on_path(p):
 			continue
+		p.y = height_at(p.x, p.z)
 		var b := MeshFactory.make_bush(rng, _pick(_bush_variants))
 		b.position = p
 		parent.add_child(b)
 	var tufts := int(220 * density)
 	for i in tufts:
 		var p := _random_point()
+		p.y = height_at(p.x, p.z)
 		var g := MeshFactory.make_grass_tuft(rng, _pick(_grass_variants))
 		g.position = p
 		parent.add_child(g)
@@ -184,7 +225,7 @@ func _build_trail(parent: Node3D) -> void:
 			cm.height = 0.06
 			marker.mesh = cm
 			marker.material_override = trail_mat
-			marker.position = pos + Vector3(0, 0.04, 0)
+			marker.position = Vector3(pos.x, height_at(pos.x, pos.z) + 0.05, pos.z)
 			marker.visible = false
 			container.add_child(marker)
 			trail_markers.append(marker)
@@ -195,7 +236,9 @@ func _build_runes(parent: Node3D) -> void:
 	for i in 10:
 		var ang := TAU * i / 10.0
 		var radius := CLEARING_RADIUS + rng.randf_range(0.5, 2.0)
-		var pos := Vector3(cos(ang) * radius, rng.randf_range(1.5, 3.0), sin(ang) * radius)
+		var rx := cos(ang) * radius
+		var rz := sin(ang) * radius
+		var pos := Vector3(rx, height_at(rx, rz) + rng.randf_range(1.5, 3.0), rz)
 		var quad := MeshInstance3D.new()
 		var qm := QuadMesh.new()
 		qm.size = Vector2(1.2, 1.2)

@@ -51,6 +51,27 @@ static func mat_standard(color: Color, rough := 0.9, metal := 0.0) -> StandardMa
 	m.metallic = metal
 	return m
 
+## A soft particle aura (rising motes / sinking embers) for magical beings.
+static func make_aura(color: Color, amount := 24, rise := 0.5, radius := 0.9, size := 0.09) -> GPUParticles3D:
+	var p := GPUParticles3D.new()
+	var mat := ParticleProcessMaterial.new()
+	mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	mat.emission_sphere_radius = radius
+	mat.direction = Vector3(0, 1, 0)
+	mat.spread = 25.0
+	mat.gravity = Vector3(0, rise, 0)
+	mat.initial_velocity_min = 0.1
+	mat.initial_velocity_max = 0.45
+	mat.color = color
+	p.process_material = mat
+	var qm := QuadMesh.new()
+	qm.size = Vector2(size, size)
+	qm.material = mat_emissive(color, 3.5, true)
+	p.draw_pass_1 = qm
+	p.amount = amount
+	p.lifetime = 2.2
+	return p
+
 static func mat_emissive(color: Color, energy := 2.0, transparent := false) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color

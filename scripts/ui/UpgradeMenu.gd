@@ -46,9 +46,7 @@ func _build_choices() -> void:
 	panel.add_child(_panel_v)
 
 	_panel_v.add_child(UITheme.make_title("Choose Your Path", 34))
-	_panel_v.add_child(UITheme.make_label(
-		"\"When the pattern is whole, you may choose what kind of seeker you become.\"",
-		16, UITheme.TEXT_DIM))
+	_panel_v.add_child(UITheme.make_label("\"%s\"" % Content.UPGRADE_INTRO, 16, UITheme.TEXT_DIM))
 	_panel_v.add_child(_spacer(8))
 
 	for up in UPGRADES:

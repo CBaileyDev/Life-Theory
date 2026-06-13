@@ -66,5 +66,5 @@ func _on_body_entered(body: Node) -> void:
 	collected = true
 	_set_active(false)
 	GameState.collect_fragment()
-	GameState.toast.emit("Fragment of Truth recovered  (%d/%d)" %
-		[GameState.fragments, GameState.FRAGMENT_TOTAL])
+	# Reveal a fragment of the mystery (atmospheric lore line).
+	GameState.request_dialogue("", Content.FRAGMENT_LINES[clampi(index, 0, 2)])

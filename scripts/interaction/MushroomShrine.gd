@@ -100,7 +100,7 @@ func get_prompt() -> String:
 
 func interact(_player: Node) -> void:
 	if not GameState.mushroom_activated:
-		GameState.request_dialogue("", ["The mushroom pulses with impossible light..."])
+		GameState.request_dialogue("", Content.SHRINE_FIRST_TOUCH)
 		GameState.activate_mushroom()
 	elif GameState.quest_step == GameState.Step.RETURN_SHRINE:
 		GameState.reach_shrine()

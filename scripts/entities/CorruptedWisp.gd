@@ -18,6 +18,7 @@ const HOVER_HEIGHT := 1.6
 const ATTACK_DAMAGE := 12.0
 const ATTACK_COOLDOWN := 1.1
 const MAX_HEALTH := 100.0
+const KNOCKBACK := 6.5
 
 var state := State.IDLE
 var health := MAX_HEALTH
@@ -65,6 +66,9 @@ func _build() -> void:
 	_light.light_energy = 2.0
 	_light.omni_range = 6.0
 	add_child(_light)
+
+	# Sinking corrupted embers.
+	add_child(MeshFactory.make_aura(Color(0.75, 0.2, 0.5), 18, -0.25, 0.55, 0.08))
 
 	var col := CollisionShape3D.new()
 	var shape := SphereShape3D.new()
@@ -162,11 +166,19 @@ func _clamp_hover(delta: float) -> void:
 	var target_y := _home.y + HOVER_HEIGHT + bob
 	global_position.y = lerpf(global_position.y, target_y, clampf(delta * 4.0, 0, 1))
 
-func take_damage(amount: float, _source: Node) -> void:
+func take_damage(amount: float, source) -> void:
 	if state == State.DEAD:
 		return
 	health -= amount
 	AudioManager.play("wisp_damage")
+	DamageNumber.spawn(get_tree().current_scene,
+		global_position + Vector3(0, 0.9, 0), amount, Color(1.0, 0.85, 0.9))
+	# Knockback away from the attacker.
+	if source is Node3D:
+		var dir: Vector3 = global_position - source.global_position
+		dir.y = 0.0
+		if dir.length() > 0.01:
+			velocity += dir.normalized() * KNOCKBACK
 	# Hit flash.
 	_core_mat.emission = Color(1.0, 0.9, 0.9)
 	var t := create_tween()
