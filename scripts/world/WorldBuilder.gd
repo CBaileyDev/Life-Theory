@@ -46,6 +46,16 @@ var _leaf_variants: Array = []
 var _bush_variants: Array = []
 var _grass_variants: Array = []
 
+# Photoscanned CC0 model scenes (decimated). Empty arrays => primitive fallback.
+const TREE_GLBS := ["pine_tree_01", "fir_tree_01", "tree_small_02"]
+const SMALLTREE_GLBS := ["fir_sapling_medium"]
+const ROCK_GLBS := ["rock_moss_set_01", "rock_07"]
+const GROUND_GLBS := ["fern_02", "grass_medium_01", "shrub_01", "tree_stump_01"]
+var _tree_scenes: Array = []
+var _smalltree_scenes: Array = []
+var _rock_scenes: Array = []
+var _ground_scenes: Array = []
+
 func _init(quality_density := 1.0) -> void:
 	density = quality_density
 	rng.seed = WORLD_SEED
@@ -66,9 +76,43 @@ func _init(quality_density := 1.0) -> void:
 		_bush_variants.append(MeshFactory.mat_foliage(c, 0.12))
 	for c in [Color(0.20, 0.36, 0.18), Color(0.24, 0.40, 0.20), Color(0.18, 0.33, 0.16)]:
 		_grass_variants.append(MeshFactory.mat_foliage(c, 0.22))
+	_tree_scenes = _load_scenes(TREE_GLBS)
+	_smalltree_scenes = _load_scenes(SMALLTREE_GLBS)
+	_rock_scenes = _load_scenes(ROCK_GLBS)
+	_ground_scenes = _load_scenes(GROUND_GLBS)
 
-func _pick(arr: Array) -> Material:
+func _load_scenes(slugs: Array) -> Array:
+	var out: Array = []
+	for s in slugs:
+		var path := "res://assets/models/%s.glb" % s
+		if ResourceLoader.exists(path):
+			out.append(load(path))
+	return out
+
+func _pick(arr: Array):
 	return arr[rng.randi_range(0, arr.size() - 1)]
+
+## Instance a model scene, wrap it with a random yaw/scale and optional trunk
+## collision so the player can't walk through it.
+func _spawn_model(scene: PackedScene, pos: Vector3, smin: float, smax: float,
+		col_radius := 0.0, col_height := 0.0) -> Node3D:
+	var root := Node3D.new()
+	root.add_child(scene.instantiate())
+	root.position = pos
+	root.rotation.y = rng.randf_range(0.0, TAU)
+	var s := rng.randf_range(smin, smax)
+	root.scale = Vector3(s, s, s)
+	if col_radius > 0.0:
+		var body := StaticBody3D.new()
+		var col := CollisionShape3D.new()
+		var shape := CylinderShape3D.new()
+		shape.radius = col_radius
+		shape.height = col_height
+		col.shape = shape
+		col.position.y = col_height * 0.5
+		body.add_child(col)
+		root.add_child(body)
+	return root
 
 func build(parent: Node3D) -> void:
 	_build_ground(parent)
@@ -159,7 +203,9 @@ func _build_boundary(parent: Node3D) -> void:
 
 # ------------------------------------------------------------------- scatter
 func _scatter_trees(parent: Node3D) -> void:
-	var count := int(140 * density)
+	var use_models: bool = _tree_scenes.size() > 0
+	# Photoscanned trees are heavier than primitives, so use fewer of them.
+	var count := int((90 if use_models else 140) * density)
 	var placed := 0
 	var attempts := 0
 	while placed < count and attempts < count * 6:
@@ -168,8 +214,16 @@ func _scatter_trees(parent: Node3D) -> void:
 		if _in_clearing(p) or _on_path(p):
 			continue
 		p.y = height_at(p.x, p.z)
-		var tree := MeshFactory.make_tree(rng, _bark, _pick(_leaf_variants))
-		tree.position = p
+		var tree: Node3D
+		if use_models:
+			# Occasional sapling for understory variation.
+			if _smalltree_scenes.size() > 0 and rng.randf() < 0.25:
+				tree = _spawn_model(_pick(_smalltree_scenes), p, 0.8, 1.4, 0.3, 3.0)
+			else:
+				tree = _spawn_model(_pick(_tree_scenes), p, 0.85, 1.3, 0.45, 7.0)
+		else:
+			tree = MeshFactory.make_tree(rng, _bark, _pick(_leaf_variants))
+			tree.position = p
 		parent.add_child(tree)
 		placed += 1
 
@@ -180,27 +234,39 @@ func _scatter_rocks(parent: Node3D) -> void:
 		if _on_path(p):
 			continue
 		p.y = height_at(p.x, p.z)
-		var rock := MeshFactory.make_rock(rng, _rock)
-		rock.position = p
+		var rock: Node3D
+		if _rock_scenes.size() > 0:
+			rock = _spawn_model(_pick(_rock_scenes), p, 0.7, 1.8)
+		else:
+			rock = MeshFactory.make_rock(rng, _rock)
+			rock.position = p
 		parent.add_child(rock)
 
 func _scatter_foliage(parent: Node3D) -> void:
-	var bushes := int(90 * density)
-	for i in bushes:
-		var p := _random_point()
-		if _on_path(p):
-			continue
-		p.y = height_at(p.x, p.z)
-		var b := MeshFactory.make_bush(rng, _pick(_bush_variants))
-		b.position = p
-		parent.add_child(b)
-	var tufts := int(220 * density)
-	for i in tufts:
-		var p := _random_point()
-		p.y = height_at(p.x, p.z)
-		var g := MeshFactory.make_grass_tuft(rng, _pick(_grass_variants))
-		g.position = p
-		parent.add_child(g)
+	# Ground cover: photoscanned ferns/grass/shrubs/stumps if available.
+	if _ground_scenes.size() > 0:
+		var clumps := int(160 * density)
+		for i in clumps:
+			var p := _random_point()
+			p.y = height_at(p.x, p.z)
+			parent.add_child(_spawn_model(_pick(_ground_scenes), p, 0.7, 1.5))
+	else:
+		var bushes := int(90 * density)
+		for i in bushes:
+			var p := _random_point()
+			if _on_path(p):
+				continue
+			p.y = height_at(p.x, p.z)
+			var b := MeshFactory.make_bush(rng, _pick(_bush_variants))
+			b.position = p
+			parent.add_child(b)
+		var tufts := int(220 * density)
+		for i in tufts:
+			var p := _random_point()
+			p.y = height_at(p.x, p.z)
+			var g := MeshFactory.make_grass_tuft(rng, _pick(_grass_variants))
+			g.position = p
+			parent.add_child(g)
 
 # ------------------------------------------------------- hidden magical layer
 func _build_trail(parent: Node3D) -> void:
