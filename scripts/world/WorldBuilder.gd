@@ -701,20 +701,24 @@ func _build_light_shafts(parent: Node3D) -> void:
 		return
 	var mat := ShaderMaterial.new()
 	mat.shader = sh
-	for i in 7:
-		var ang := TAU * i / 7.0 + rng.randf_range(-0.25, 0.25)
-		var r := CLEARING_RADIUS * rng.randf_range(0.35, 0.95)
+	# A few subtle shafts, all sharing the sun's azimuth so they read as real
+	# crepuscular rays rather than a chaotic fan. The volumetric fog does the rest.
+	var sun_yaw := deg_to_rad(40.0)
+	for i in 4:
+		var ang := TAU * i / 4.0 + rng.randf_range(-0.2, 0.2)
+		var r := CLEARING_RADIUS * rng.randf_range(0.45, 0.95)
 		var x := cos(ang) * r
 		var z := sin(ang) * r
 		var quad := MeshInstance3D.new()
 		var qm := QuadMesh.new()
-		var hgt := rng.randf_range(11.0, 15.0)
-		qm.size = Vector2(rng.randf_range(2.0, 3.4), hgt)
+		var hgt := rng.randf_range(11.0, 14.0)
+		qm.size = Vector2(rng.randf_range(1.8, 2.8), hgt)
 		quad.mesh = qm
 		quad.material_override = mat
 		quad.position = Vector3(x, height_at(x, z) + hgt * 0.42, z)
-		# Lean along the sun (the dir light pitches ~-38°) with a varied yaw.
-		quad.rotation = Vector3(deg_to_rad(rng.randf_range(-30.0, -18.0)), ang + PI * 0.5, 0.0)
+		# Consistent sun-aligned lean (dir light pitches ~-38°), small yaw jitter.
+		quad.rotation = Vector3(deg_to_rad(rng.randf_range(-26.0, -20.0)),
+				sun_yaw + rng.randf_range(-0.3, 0.3), 0.0)
 		quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		parent.add_child(quad)
 

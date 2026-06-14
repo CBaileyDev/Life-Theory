@@ -5,8 +5,8 @@ shader_type spatial;
 // (normal depth test) but write no depth. Subtle by design.
 render_mode unshaded, cull_disabled, blend_add, depth_draw_never;
 
-uniform vec3 shaft_color : source_color = vec3(1.0, 0.93, 0.72);
-uniform float intensity = 0.45;
+uniform vec3 shaft_color : source_color = vec3(1.0, 0.94, 0.76);
+uniform float intensity = 0.24;
 
 void fragment() {
 	float hx = 1.0 - abs(UV.x - 0.5) * 2.0;   // bright center column, soft edges

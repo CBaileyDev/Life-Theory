@@ -34,6 +34,8 @@ var master_volume: float = 0.9
 var fov: float = 75.0
 var invert_y: bool = false
 var render_scale: float = 1.0   # 3D resolution scale (perf lever for weak HW)
+const SETTINGS_VERSION := 2      # bump to force a one-time re-detect of video defaults
+var _loaded_version := 1
 var show_fps: bool = false      # on-screen FPS counter (toggle in-game with F3)
 
 # Accessibility / gameplay
@@ -60,6 +62,10 @@ func _ready() -> void:
 	load_settings()
 	if _first_run:
 		_auto_detect_quality()
+	elif _loaded_version < SETTINGS_VERSION:
+		# One-time upgrade: re-detect video defaults (fixes Apple Silicon being
+		# stuck on the old LOW + 0.7 render-scale default — now full-res/crisp).
+		_auto_detect_quality()
 	apply_window_settings()
 	get_viewport().scaling_3d_scale = render_scale
 	var bus := AudioServer.get_bus_index("Master")
@@ -71,13 +77,15 @@ func _ready() -> void:
 ## this in Settings; once they do, the persisted choice wins (never re-detected).
 func _auto_detect_quality() -> void:
 	var gpu := RenderingServer.get_video_adapter_name().to_lower()
-	if gpu.contains("apple") or gpu.contains("intel") or gpu.contains("integrated") \
+	if gpu.contains("intel") or gpu.contains("integrated") \
 			or gpu.contains("llvmpipe") or gpu.contains("software") or gpu.contains("swiftshader"):
-		# Apple Silicon / integrated: favour a stable frame rate over crispness.
+		# Weak integrated GPUs: favour a stable frame rate over crispness.
 		graphics_quality = Quality.LOW
 		render_scale = 0.7
-	elif gpu.contains("nvidia") or gpu.contains("geforce") or gpu.contains("rtx") \
-			or gpu.contains("radeon") or gpu.contains("rx ") or gpu.contains("arc"):
+	elif gpu.contains("apple") or gpu.contains("nvidia") or gpu.contains("geforce") \
+			or gpu.contains("rtx") or gpu.contains("radeon") or gpu.contains("rx ") or gpu.contains("arc"):
+		# Apple Silicon (M-series) + discrete GPUs are strong — render at full res
+		# for crisp output. (Drop render scale in Settings if a weaker chip dips.)
 		graphics_quality = Quality.HIGH
 		render_scale = 1.0
 	else:
@@ -93,6 +101,7 @@ func load_settings() -> void:
 	if cfg.load(CONFIG_PATH) != OK:
 		return
 	_first_run = false
+	_loaded_version = cfg.get_value("meta", "version", 1)
 	graphics_quality = cfg.get_value("video", "quality", graphics_quality)
 	fullscreen = cfg.get_value("video", "fullscreen", fullscreen)
 	resolution_index = cfg.get_value("video", "resolution_index", resolution_index)
@@ -111,6 +120,7 @@ func load_settings() -> void:
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
+	cfg.set_value("meta", "version", SETTINGS_VERSION)
 	cfg.set_value("video", "quality", graphics_quality)
 	cfg.set_value("video", "fullscreen", fullscreen)
 	cfg.set_value("video", "resolution_index", resolution_index)

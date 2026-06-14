@@ -132,18 +132,18 @@ func _build_environment() -> void:
 	_env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 	_env.fog_light_color = Color(0.72, 0.74, 0.64)
 	_env.fog_light_energy = 1.0
-	_env.fog_density = 0.0045
-	_env.fog_sun_scatter = 0.3
-	_env.fog_aerial_perspective = 0.55
-	_env.fog_sky_affect = 0.35
+	_env.fog_density = 0.004
+	_env.fog_sun_scatter = 0.16
+	_env.fog_aerial_perspective = 0.5
+	_env.fog_sky_affect = 0.3
 	_env.tonemap_mode = Environment.TONE_MAPPER_AGX
 	_env.tonemap_exposure = 1.1
 	_env.tonemap_white = 6.0
 	_env.glow_enabled = true
-	_env.glow_intensity = 0.5
-	_env.glow_strength = 1.05
-	_env.glow_bloom = 0.12
-	_env.glow_hdr_threshold = 0.95
+	_env.glow_intensity = 0.42
+	_env.glow_strength = 1.0
+	_env.glow_bloom = 0.06
+	_env.glow_hdr_threshold = 1.05
 	# Cinematic colour grade (cheap GPU adjustment).
 	_env.adjustment_enabled = true
 	_env.adjustment_brightness = 1.02
