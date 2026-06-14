@@ -18,6 +18,19 @@ const HEIGHT_AMP := 2.4
 const FLAT_RADIUS := 10.5    # fully flat inside this radius
 const BLEND_RADIUS := 18.0   # full height beyond this radius
 var _hnoise: FastNoiseLite
+var _cover_noise: FastNoiseLite
+
+# Desire-path network through the clearing: meandering polylines (x,z) worn into
+# bare earth, connecting the spawn corridor to the points of interest. Drives the
+# trail mask in _cover_density / _trail_wear (texture + grass thinning agree).
+const TRAILS := [
+	[Vector2(0, 18), Vector2(0.6, 12), Vector2(-0.6, 5.5), Vector2(0, 0), Vector2(0, -2)],   # spawn → shrine
+	[Vector2(0, 5.5), Vector2(-4, 7), Vector2(-7.5, 8.5)],                                    # spur → pond
+	[Vector2(0, 0), Vector2(4.5, -3.5), Vector2(8.5, -8), Vector2(11, -11)],                  # spur → stag glade
+	[Vector2(-1.5, 0.5), Vector2(-8, -0.5), Vector2(-13.5, -1)],                              # spur → ridge overlook
+]
+const TRAIL_HALF := 1.15     # bare-earth half-width of a trail
+const TRAIL_FEATHER := 1.3   # grass fades back in over this distance past the edge
 
 # Key locations (shared with the Forest controller for entity placement).
 const SPAWN := Vector3(0, 2.0, 18.0)
@@ -121,6 +134,14 @@ func _init(quality_density := 1.0, biome_id := 0, lod_mult := 1.0) -> void:
 	_hnoise.frequency = 0.035
 	_hnoise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	_hnoise.fractal_octaves = 3
+	# Cover field: low-frequency patches of bare earth between the grass. Drives
+	# BOTH the ground texture (grass<->dirt) and the grass-scatter density, so the
+	# soil shows through exactly where the blades thin out.
+	_cover_noise = FastNoiseLite.new()
+	_cover_noise.seed = WORLD_SEED + 7
+	_cover_noise.frequency = 0.05
+	_cover_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	_cover_noise.fractal_octaves = 2
 	# Scanned-PBR (CC0) materials with procedural fallback colours.
 	_bark = MeshFactory.mat_pbr("bark", 0.5, Color(0.27, 0.20, 0.15))
 	_rock = MeshFactory.mat_pbr("rock", 0.4, Color(0.30, 0.33, 0.36))
@@ -242,8 +263,18 @@ func _build_ground(parent: Node3D) -> void:
 			var v10 := Vector3(x1, height_at(x1, z0), z0)
 			var v01 := Vector3(x0, height_at(x0, z1), z1)
 			var v11 := Vector3(x1, height_at(x1, z1), z1)
-			st.add_vertex(v00); st.add_vertex(v01); st.add_vertex(v11)
-			st.add_vertex(v00); st.add_vertex(v11); st.add_vertex(v10)
+			# Cover field baked per vertex: r = grassiness, g = trail wear. Read by
+			# terrain.gdshader to place dirt/trails exactly where grass is thinned.
+			var c00 := Color(_cover_density(x0, z0), _trail_wear(x0, z0), 0.0, 1.0)
+			var c10 := Color(_cover_density(x1, z0), _trail_wear(x1, z0), 0.0, 1.0)
+			var c01 := Color(_cover_density(x0, z1), _trail_wear(x0, z1), 0.0, 1.0)
+			var c11 := Color(_cover_density(x1, z1), _trail_wear(x1, z1), 0.0, 1.0)
+			st.set_color(c00); st.add_vertex(v00)
+			st.set_color(c01); st.add_vertex(v01)
+			st.set_color(c11); st.add_vertex(v11)
+			st.set_color(c00); st.add_vertex(v00)
+			st.set_color(c11); st.add_vertex(v11)
+			st.set_color(c10); st.add_vertex(v10)
 	st.generate_normals()
 	var mesh := st.commit()
 
@@ -461,12 +492,15 @@ func _scatter_grass_carpet(parent: Node3D) -> void:
 	var mat := MeshFactory.mat_grass_card(_grass_scene, biome)
 	if mat == null:
 		return
-	var count := int(8000 * density)
+	# Bump the budget: thinning clears the carpet off ~1/3 of the floor (dirt +
+	# trails), so the surviving blades repack denser where grass does grow.
+	var count := int(9500 * density)
 	_scatter_mm(parent, [_grass_scene], count, 0.7, 1.7, {
 		"cull": CULL_GROUND * 1.4, "y_offset": -0.04, "cell_size": 8.0,
 		"mesh": MeshFactory.make_grass_card_mesh(),
 		"material_override": mat,
 		"vary_color": true,
+		"cover_thin": true,
 		"cast_shadow": GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
 	})
 
@@ -477,9 +511,10 @@ func _scatter_grass_tufts(parent: Node3D) -> void:
 	var path := "res://assets/models/grass_tuft_01.glb"
 	if not ResourceLoader.exists(path):
 		return
-	var count := int(800 * density)
+	var count := int(900 * density)
 	_scatter_mm(parent, [load(path)], count, 0.7, 1.6, {
 		"cull": CULL_GROUND, "y_offset": -0.03,
+		"cover_thin": true, "cover_thin_pow": 1.6,
 		"cast_shadow": GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
 	})
 
@@ -487,6 +522,8 @@ func _scatter_foliage(parent: Node3D) -> void:
 	if _grass_scene == null and _tree_scenes.is_empty():
 		_scatter_foliage_primitive(parent)
 		return
+	# Dry forest litter settles on bare soil and trodden trails, not deep grass.
+	var litter := {"dry_branches": 0.6, "pinecone_douglasfir": 0.65}
 	var biome_mult := 0.85 if biome == 1 else 1.0
 	for entry in GROUND_COVER:
 		var slug: String = entry[0]
@@ -497,11 +534,13 @@ func _scatter_foliage(parent: Node3D) -> void:
 		var count := int(entry[1] * density * biome_mult)
 		_scatter_mm(parent, [scene], count, entry[2], entry[3], {
 			"cull": CULL_GROUND, "y_offset": entry[4],
+			"cover_bias": litter.get(slug, 0.0),
 			"cast_shadow": GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
 		})
 	# Generated North Cascades ground cover, biome-resolved (natural / glow).
 	for entry in NC_GROUND_COVER:
-		var slug: String = _nc(entry[0])
+		var base: String = entry[0]
+		var slug: String = _nc(base)
 		var path := "res://assets/models/%s.glb" % slug
 		if not ResourceLoader.exists(path):
 			continue
@@ -509,6 +548,7 @@ func _scatter_foliage(parent: Node3D) -> void:
 		var count := int(entry[1] * density * biome_mult)
 		_scatter_mm(parent, [scene], count, entry[2], entry[3], {
 			"cull": CULL_GROUND, "y_offset": entry[4],
+			"cover_bias": litter.get(base, 0.0),
 			"cast_shadow": GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
 		})
 
@@ -566,6 +606,19 @@ func _scatter_mm(parent: Node3D, scenes: Array, count: int, smin: float, smax: f
 		# Keep the overlook a clean vantage (no grass/trees blocking the vista).
 		if Vector2(p.x - RIDGE.x, p.z - RIDGE.z).length() < 5.5:
 			continue
+		# Density thinning: grass-like cover follows the shared cover field, so the
+		# carpet disappears over bare-dirt patches and worn trails (the rejected
+		# blades get retried elsewhere, packing grass denser where it does grow).
+		if opts.get("cover_thin", false):
+			if rng.randf() > pow(_cover_density(p.x, p.z), opts.get("cover_thin_pow", 1.3)):
+				continue
+		# Litter bias: pinecones/twigs collect on bare soil and worn trails. Accept
+		# probability leans toward low-cover ground (bias 0 = uniform, 1 = bare-only).
+		var cbias: float = opts.get("cover_bias", 0.0)
+		if cbias > 0.0:
+			var accept: float = lerpf(1.0, 1.0 - _cover_density(p.x, p.z), cbias)
+			if rng.randf() > accept:
+				continue
 		p.y = height_at(p.x, p.z) + y_off
 		var scn: PackedScene = _pick(scenes)
 		var cr := col_r
@@ -993,3 +1046,43 @@ func _in_clearing(p: Vector3) -> bool:
 
 func _on_path(p: Vector3) -> bool:
 	return absf(p.x) < PATH_HALF_WIDTH and p.z > 0.0 and p.z < 18.5
+
+# ------------------------------------------------------- ground cover field
+## Distance (metres) from (x,z) to the nearest trail centre-line.
+func _dist_to_trails(x: float, z: float) -> float:
+	var pt := Vector2(x, z)
+	var best := 1e9
+	for line in TRAILS:
+		for i in range(line.size() - 1):
+			var d := _seg_dist(pt, line[i], line[i + 1])
+			if d < best:
+				best = d
+	return best
+
+## Shortest distance from point p to segment a-b (2D).
+func _seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var t := 0.0
+	var denom := ab.length_squared()
+	if denom > 0.0001:
+		t = clampf((p - a).dot(ab) / denom, 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
+## How worn/trodden the ground is at (x,z): 1 on a trail centre-line, easing to 0
+## past the feathered edge. Damp compacted earth in the texture; debris collects.
+func _trail_wear(x: float, z: float) -> float:
+	var d := _dist_to_trails(x, z)
+	return 1.0 - smoothstep(TRAIL_HALF * 0.4, TRAIL_HALF + TRAIL_FEATHER, d)
+
+## Grassiness at (x,z): 1 = lush grass, 0 = bare soil. Combines organic bare-earth
+## patches (low-freq noise) with the trodden trail network. Shared by the ground
+## shader (vertex colour) and the grass scatter so texture and blades never
+## disagree. Cheap enough to call per-vertex and per-scatter-candidate.
+func _cover_density(x: float, z: float) -> float:
+	var g := 1.0
+	# Organic patches of thinner grass / exposed earth.
+	var n := _cover_noise.get_noise_2d(x, z) * 0.5 + 0.5     # 0..1
+	g -= smoothstep(0.58, 0.86, n) * 0.85
+	# Trails carve bare earth right through the grass.
+	g = minf(g, 1.0 - _trail_wear(x, z))
+	return clampf(g, 0.0, 1.0)

@@ -50,6 +50,11 @@ uniform float path_feather = 2.2;
 
 varying vec3 v_wpos;
 varying vec3 v_wnorm;
+// Per-vertex cover field baked by WorldBuilder: r = grassiness (1 lush .. 0 bare
+// dirt), g = trail wear (0 .. 1, damp trodden earth). The SAME field thins the
+// grass MultiMesh, so exposed soil and worn trails in the texture line up with
+// where the grass blades actually disappear (AAA splat/density-map workflow).
+varying vec4 v_cover;
 
 // --- cheap value noise (hash-based), for macro patch variation ----------------
 float hash21(vec2 p) {
@@ -106,6 +111,7 @@ vec3 tri_norm(sampler2D tex, vec3 wp, vec3 wn, vec3 bw, float s) {
 void vertex() {
 	v_wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_wnorm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	v_cover = COLOR;
 }
 
 void fragment() {
@@ -117,15 +123,17 @@ void fragment() {
 	// --- blend weights -------------------------------------------------------
 	float slope = 1.0 - clamp(wn.y, 0.0, 1.0);                 // 0 flat .. 1 vertical
 	float rockw = smoothstep(0.30, 0.62, slope);              // rock on steep faces
-	float macro = fbm(wp.xz * macro_scale);                    // organic patches
-	float floorw = smoothstep(0.52, 0.74, macro);            // dirt/leaf clearings
 
-	// Worn dirt path: inside the corridor, feathered with noise at the edges.
-	float dx = abs(wp.x) - path_half_width;
-	float along = step(path_z_min, wp.z) * step(wp.z, path_z_max);
-	float edge_noise = (fbm(wp.xz * 0.5) - 0.5) * 1.4;
-	float pathw = along * (1.0 - smoothstep(0.0, path_feather, dx + edge_noise));
-	floorw = clamp(max(floorw, pathw), 0.0, 1.0);
+	// Grass <-> bare-dirt split comes from the baked cover field (the same field
+	// that thins the grass MultiMesh), so soil shows through exactly where the
+	// blades disappear. A whisper of macro noise only roughens the boundary so it
+	// doesn't read as a hard painted edge.
+	float grassiness = v_cover.r;
+	float wear = v_cover.g;
+	float macro = fbm(wp.xz * macro_scale);
+	float floorw = clamp((1.0 - grassiness) + (macro - 0.5) * 0.18, 0.0, 1.0);
+	// Trodden trails are bare earth regardless of the grass field.
+	floorw = clamp(max(floorw, wear), 0.0, 1.0);
 
 	// --- sample + composite --------------------------------------------------
 	vec3 g_a = tri_col(grass_albedo, wp, bw, grass_scale);
@@ -146,8 +154,11 @@ void fragment() {
 
 	// Subtle large-scale ambient-occlusion-ish darkening in the dirt hollows.
 	float ao = mix(1.0, 0.82, floorw * 0.6);
+	// Trodden trails are damp, compacted, darker earth — sink them below the
+	// loose dirt patches so the path network reads as walked-in, not just bare.
+	float trail_dark = mix(1.0, 0.76, wear);
 
-	ALBEDO = alb * tint * ao;
+	ALBEDO = alb * tint * ao * trail_dark;
 	// Forest floor is MATTE: keep roughness high and specular low, or the flat
 	// ground mirror-reflects the sky/HDRI and reads as see-through water/glass.
 	ROUGHNESS = clamp(rgh, 0.9, 1.0);
