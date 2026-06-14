@@ -147,8 +147,12 @@ static func mat_water(biome := 0) -> Material:
 	var m := ShaderMaterial.new()
 	m.shader = sh
 	if biome == 1:
-		m.set_shader_parameter("shallow_color", Vector3(0.12, 0.20, 0.34))
-		m.set_shader_parameter("deep_color", Vector3(0.02, 0.05, 0.12))
+		# The Loomstrata pool runs cold and starless — no tropical sand glow.
+		m.set_shader_parameter("shallow_color", Vector3(0.12, 0.22, 0.36))
+		m.set_shader_parameter("deep_color", Vector3(0.02, 0.05, 0.13))
+		m.set_shader_parameter("foam_color", Vector3(0.55, 0.62, 0.78))
+		m.set_shader_parameter("sky_color", Vector3(0.30, 0.34, 0.50))
+		m.set_shader_parameter("clarity", 0.5)
 	return m
 
 static func mat_standard(color: Color, rough := 0.9, metal := 0.0) -> StandardMaterial3D:

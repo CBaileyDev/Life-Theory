@@ -256,6 +256,7 @@ func _build_ground(parent: Node3D) -> void:
 
 # -------------------------------------------------------------------- water
 func _build_water(parent: Node3D) -> void:
+	_build_pond_bed(parent)
 	var mi := MeshInstance3D.new()
 	mi.name = "Pond"
 	var pm := PlaneMesh.new()
@@ -264,6 +265,48 @@ func _build_water(parent: Node3D) -> void:
 	mi.position = Vector3(POND.x, WATER_LEVEL, POND.z)
 	mi.material_override = MeshFactory.mat_water(biome)
 	parent.add_child(mi)
+
+## A pale sandy bed laid into the pond basin so the clear turquoise water reads
+## bright (Trunk Bay over white sand) rather than tinting dark forest floor. The
+## disc follows the carved bowl (sampled from height_at) a few cm above the
+## terrain. Quietwood only — the Loomstrata pool stays a cold, bottomless dark.
+func _build_pond_bed(parent: Node3D) -> void:
+	if biome != 0:
+		return
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rings := 12
+	var segs := 28
+	var center := Vector3(POND.x, height_at(POND.x, POND.z) + 0.05, POND.z)
+	var ringpts: Array = []
+	for ri in range(1, rings + 1):
+		var rr := POND_R * 1.04 * float(ri) / rings
+		var row: Array = []
+		for si in range(segs):
+			var a := TAU * float(si) / segs
+			var x := POND.x + cos(a) * rr
+			var z := POND.z + sin(a) * rr
+			row.append(Vector3(x, height_at(x, z) + 0.05, z))
+		ringpts.append(row)
+	var first: Array = ringpts[0]
+	for si in range(segs):
+		var n := (si + 1) % segs
+		st.add_vertex(center); st.add_vertex(first[n]); st.add_vertex(first[si])
+	for ri in range(1, rings):
+		var a0: Array = ringpts[ri - 1]
+		var a1: Array = ringpts[ri]
+		for si in range(segs):
+			var n := (si + 1) % segs
+			st.add_vertex(a0[si]); st.add_vertex(a0[n]); st.add_vertex(a1[n])
+			st.add_vertex(a0[si]); st.add_vertex(a1[n]); st.add_vertex(a1[si])
+	st.generate_normals()
+	var bed := MeshInstance3D.new()
+	bed.name = "PondBed"
+	bed.mesh = st.commit()
+	var sand := MeshFactory.mat_standard(Color(0.82, 0.75, 0.56), 0.92)
+	sand.cull_mode = BaseMaterial3D.CULL_DISABLED   # lit from above through water
+	bed.material_override = sand
+	parent.add_child(bed)
 
 # ------------------------------------------------------------------ boundary
 func _build_boundary(parent: Node3D) -> void:
@@ -300,7 +343,8 @@ func _scatter_giant_pines(parent: Node3D) -> void:
 	var biome_mult := 0.55 if biome == 1 else 1.0
 	var count := int(60 * density * biome_mult)
 	_scatter_mm(parent, [_giant_pine_scene], count, 0.8, 1.5, {
-		"avoid_clearing": true, "avoid_path": true, "cull": CULL_TREE * 1.9,
+		"avoid_clearing": true, "avoid_path": true, "avoid_pond": true,
+		"cull": CULL_TREE * 1.9,
 		"col_radius": 0.7, "col_height": 16.0, "y_offset": -0.2,
 		"ring_min": 15.0, "ring_max": 26.0,
 	})
@@ -453,6 +497,8 @@ func _scatter_mm(parent: Node3D, scenes: Array, count: int, smin: float, smax: f
 		if avoid_clearing and _in_clearing(p):
 			continue
 		if avoid_path and _on_path(p):
+			continue
+		if opts.get("avoid_pond", false) and Vector2(p.x - POND.x, p.z - POND.z).length() < POND_R + 4.0:
 			continue
 		# Trees/rocks (which set avoid_path) also stay clear of the spawn so the
 		# player never wakes up wedged inside a boulder/trunk at high density.
