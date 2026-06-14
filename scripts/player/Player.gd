@@ -67,8 +67,8 @@ var weapon_mesh: Node3D
 var _hud   # untyped: HUD is accessed via duck-typing (set_prompt/flash_damage)
 
 const ProjectileScene := preload("res://scripts/combat/Projectile.gd")
-const RootbladeScene := preload("res://assets/models/rootblade.glb")
-const SeekerScene := preload("res://assets/models/seeker.glb")
+const RootbladeScene := preload("res://assets/models/azure_riftblade.glb")
+const SeekerScene := preload("res://assets/models/verdant_veil.glb")
 
 # Third-person avatar (the Seeker) + its held blade. Built in _ready, shown only
 # in third-person. The mesh is rigid, so motion is sold procedurally (bob/lean/
@@ -152,22 +152,19 @@ func _build_camera_rig() -> void:
 	head.add_child(lantern)
 
 func _build_weapon() -> void:
-	# The Ancient Rootblade — grief crystallised: a knotted root grip, a pale
-	# crystalline leaf-blade veined with living teal light, and a glowing seed at
-	# the pommel. A high-res mesh sculpted in Blender, held as the first-person
-	# view-model at the lower-right, tilted for a natural ready pose.
+	# The Azure Riftblade (Meshy AI) — held as the first-person view-model at the
+	# lower-right. Model is ~1.1m, grip at its origin, blade pointing +Y.
 	weapon_pivot = Node3D.new()
 	weapon_pivot.name = "WeaponPivot"
-	weapon_pivot.position = Vector3(0.38, -0.32, -0.58)
+	weapon_pivot.position = Vector3(0.40, -0.42, -0.60)
 	weapon_pivot.rotation_degrees = Vector3(8, -10, 5)
 	fp_camera.add_child(weapon_pivot)
 
 	var rb := RootbladeScene.instantiate()
-	rb.name = "RootbladeModel"
-	# The blade points +Y (up) in model space; held grip-down at the pivot.
-	rb.scale = Vector3.ONE * 0.56
+	rb.name = "RiftbladeModel"
+	rb.scale = Vector3.ONE * 0.52
 	rb.rotation_degrees = Vector3(-14.0, 0.0, 0.0)   # tip pitched slightly forward
-	rb.position = Vector3(0.0, 0.02, 0.0)
+	rb.position = Vector3(0.0, 0.0, 0.0)
 	weapon_pivot.add_child(rb)
 	weapon_mesh = rb
 
@@ -181,17 +178,14 @@ func _build_tp_body() -> void:
 
 	var seeker := SeekerScene.instantiate()
 	seeker.name = "SeekerModel"
-	# Blender +Y forward → Godot -Z forward, matching the player's facing.
+	# Verdant Veil (Meshy AI), feet at origin. Faces +Z in model space; flip to
+	# face the player's -Z forward.
 	seeker.rotation_degrees = Vector3(0.0, 180.0, 0.0)
 	tp_body.add_child(seeker)
 
-	# Rootblade gripped in the right hand. The hand sits forward-right of the
-	# chest in model space; values mirror the Seeker's sculpted hand position.
-	tp_sword = RootbladeScene.instantiate()
-	tp_sword.name = "SeekerBlade"
-	tp_sword.position = Vector3(-0.14, 1.02, 0.40)
-	tp_sword.rotation_degrees = Vector3(-18.0, 0.0, -22.0)
-	tp_body.add_child(tp_sword)
+	# The avatar is an un-rigged A-pose mesh, so it can't grip a weapon naturally
+	# yet — the held blade is hidden until it's rigged. (FP view-model still shows
+	# the blade.) tp_sword stays null; _swing_weapon guards on it.
 
 # ------------------------------------------------------------------ camera
 func _apply_camera_mode(third_person: bool) -> void:

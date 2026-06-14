@@ -75,7 +75,7 @@ const TREE_GLBS := ["pine_tree_01", "fir_tree_01", "tree_small_02"]
 const SMALLTREE_GLBS := ["fir_sapling_medium"]
 # Hand-sculpted originals (Blender, from scratch) — boulders + the giant
 # Washington-style pine that towers over the canopy.
-const ROCK_GLBS := ["rock_boulder_01", "rock_boulder_02", "rock_slab_01", "rock_slab_02", "rock_tall_01"]
+const ROCK_GLBS := ["mossy_granite"]
 const GIANT_PINE_GLBS := ["quiet_giant"]
 # A dense, wind-swayed grass carpet (own MultiMesh) is the floor's main life.
 const GRASS_GLB := "grass_medium_01"
@@ -88,7 +88,7 @@ const GROUND_COVER := [
 	["nettle_plant", 70, 0.3, 0.6, -0.02],
 	["dry_branches", 130, 0.6, 1.2, 0.0],
 	["tree_stump_01", 22, 0.6, 1.1, -0.06],
-	["mushroom_cluster_01", 18, 1.0, 2.2, -0.02],   # glowing original clusters, rare accents
+	["ultraviolet_mushroom", 8, 0.8, 1.6, -0.02],   # Meshy AI glowing accents (heavy mesh -> low count)
 ]
 var _tree_scenes: Array = []
 var _smalltree_scenes: Array = []
