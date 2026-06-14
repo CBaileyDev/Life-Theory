@@ -28,6 +28,10 @@ const DODGE_COOLDOWN := 0.6
 var _dodge_timer := 0.0     # >0 while a dodge is in progress
 var _dodge_cd := 0.0
 var _dodge_dir := Vector3.ZERO
+var fov_cinematic := false   # when true, scripted FOV tweens own the camera FOV
+
+func set_fov_cinematic(on: bool) -> void:
+	fov_cinematic = on
 
 var _stamina := STAMINA_MAX
 var _sprint_toggled := false
@@ -237,7 +241,8 @@ func _process(delta: float) -> void:
 		_weapon_kick = _weapon_kick.lerp(Vector3.ZERO, clampf(delta * 12.0, 0, 1))
 		weapon_pivot.position = _WEAPON_BASE + bob + _weapon_kick
 	# Sprint FOV kick — a subtle speed sell that settles back when you slow.
-	if fp_camera and not SettingsManager.reduce_motion:
+	# Suspended while a cinematic owns the FOV (transformation / vista).
+	if fp_camera and not SettingsManager.reduce_motion and not fov_cinematic:
 		var want := _base_fov + (8.0 if _is_sprinting else 0.0)
 		fp_camera.fov = lerpf(fp_camera.fov, want, clampf(delta * 8.0, 0, 1))
 

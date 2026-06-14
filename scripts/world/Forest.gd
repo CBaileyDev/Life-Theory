@@ -456,12 +456,15 @@ func _play_transformation() -> void:
 	AudioManager.play("mushroom_transform")
 	AudioManager.play("magic_hum", -4.0)
 	_burst_at_shrine()
-	# Camera FOV punch.
+	# Camera FOV punch — claim the FOV from the sprint-FOV lerp for the beat, then
+	# release it (ending at the player's real FOV setting, not a hardcoded value).
 	var cam = _player.get("fp_camera") if _player else null
-	if cam:
+	if cam and _player and _player.has_method("set_fov_cinematic"):
+		_player.set_fov_cinematic(true)
 		var ct := _track(create_tween())
-		ct.tween_property(cam, "fov", 95.0, 0.3)
-		ct.tween_property(cam, "fov", 75.0, 0.9)
+		ct.tween_property(cam, "fov", 96.0, 0.3).set_trans(Tween.TRANS_SINE)
+		ct.tween_property(cam, "fov", SettingsManager.fov, 1.0).set_trans(Tween.TRANS_SINE)
+		ct.tween_callback(func(): if _player: _player.set_fov_cinematic(false))
 	# Screen distortion + flash, palette swap at the peak.
 	var t := _track(create_tween())
 	t.tween_method(_set_transition, 0.0, 1.0, 0.35)
