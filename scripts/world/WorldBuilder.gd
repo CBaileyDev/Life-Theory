@@ -156,6 +156,7 @@ func build(parent: Node3D) -> void:
 	_scatter_rocks(parent)
 	_build_logs(parent)
 	_scatter_grass_carpet(parent)
+	_scatter_grass_tufts(parent)
 	_scatter_foliage(parent)
 	_build_wrong_tree(parent)
 	_build_overlook(parent)
@@ -439,6 +440,19 @@ func _scatter_grass_carpet(parent: Node3D) -> void:
 		"mesh": MeshFactory.make_grass_card_mesh(),
 		"material_override": mat,
 		"vary_color": true,
+		"cast_shadow": GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
+	})
+
+## Hand-sculpted 3D grass clumps (folded blades) scattered close to the player
+## as a richer foreground layer over the cheap distant card carpet. Short cull
+## keeps the heavier geometry only where it's seen up close.
+func _scatter_grass_tufts(parent: Node3D) -> void:
+	var path := "res://assets/models/grass_tuft_01.glb"
+	if not ResourceLoader.exists(path):
+		return
+	var count := int(800 * density)
+	_scatter_mm(parent, [load(path)], count, 0.7, 1.6, {
+		"cull": CULL_GROUND, "y_offset": -0.03,
 		"cast_shadow": GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
 	})
 
