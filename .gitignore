@@ -25,3 +25,6 @@ tools/shots/
 
 # Claude Code local settings (may contain secrets like API keys)
 .claude/settings.local.json
+
+# Meshy runtime task logs/metadata (not source)
+tools/meshy/
