@@ -203,12 +203,14 @@ func _build() -> void:
 	root.add_child(_toast_label)
 
 	# Death overlay (hidden until the player falls).
+	# Death is the Forgetting smoothing you — a pale white wash, not a dark fade.
 	_death_overlay = ColorRect.new()
-	_death_overlay.color = Color(0.02, 0.0, 0.02, 0.0)
+	_death_overlay.color = Color(0.88, 0.89, 0.95, 0.0)
 	_death_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_death_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_death_overlay)
-	_death_label = UITheme.make_title("The forest reclaims you...", 34)
+	_death_label = UITheme.make_title("The Forgetting smooths the hurt away.", 34)
+	_death_label.add_theme_color_override("font_color", Color(0.12, 0.13, 0.20))
 	_death_label.set_anchors_preset(Control.PRESET_CENTER)
 	_death_label.modulate.a = 0.0
 	root.add_child(_death_label)

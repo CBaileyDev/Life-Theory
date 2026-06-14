@@ -32,7 +32,7 @@ func _process(delta: float) -> void:
 			if _t < 0.6:
 				return
 			var player = _first("player")
-			var wisp = _first("enemy")
+			var wisp = _first_wisp()
 			if not player or not wisp:
 				_fail("missing player(%s) or wisp(%s)" % [player != null, wisp != null])
 				_finish()
@@ -49,7 +49,7 @@ func _process(delta: float) -> void:
 				return
 			var player = _first("player")
 			if not is_instance_valid(_target):
-				_target = _first("enemy")
+				_target = _first_wisp()
 			var before_count = get_tree().get_nodes_in_group("enemy").size()
 			# Re-stage in front THIS frame (the wisp drifts via its own physics).
 			var cam = player.fp_camera
@@ -96,8 +96,22 @@ func _process(delta: float) -> void:
 				print("COMBAT_TEST dodge invuln=", GameState.player_invuln, " blocked=", blocked)
 				if not GameState.player_invuln or not blocked:
 					_fail("dodge i-frames did not block damage")
+			# Verify the wrong-tree secret dissolves into Essence.
+			var wt = null
+			for e in get_tree().get_nodes_in_group("enemy"):
+				if e is WrongTree:
+					wt = e
+					break
+			if wt:
+				var ess0 = GameState.forest_essence
+				wt.take_damage(999.0, _first("player"))
+				print("COMBAT_TEST wrongtree essence +", GameState.forest_essence - ess0)
+				if GameState.forest_essence <= ess0:
+					_fail("wrong-tree gave no essence")
+			else:
+				_fail("no WrongTree in the world")
 			# Kill a wisp outright to exercise the death pop + spark + essence.
-			var wisp = _first("enemy")
+			var wisp = _first_wisp()
 			if wisp:
 				var ess = GameState.forest_essence
 				wisp.take_damage(999.0, _first("player"))
@@ -122,3 +136,9 @@ func _finish() -> void:
 func _first(g: String) -> Node:
 	var n := get_tree().get_nodes_in_group(g)
 	return n[0] if n.size() > 0 else null
+
+func _first_wisp() -> Node:
+	for e in get_tree().get_nodes_in_group("enemy"):
+		if e is CorruptedWisp:   # excludes the StaticBody WrongTree
+			return e
+	return null

@@ -145,6 +145,7 @@ func build(parent: Node3D) -> void:
 	_build_logs(parent)
 	_scatter_grass_carpet(parent)
 	_scatter_foliage(parent)
+	_build_wrong_tree(parent)
 	if biome == 1:
 		_build_seams(parent)
 	_build_trail(parent)
@@ -568,6 +569,14 @@ func _scatter_foliage_primitive(parent: Node3D) -> void:
 		var g := MeshFactory.make_grass_tuft(rng, _pick(_grass_variants))
 		g.position = p
 		parent.add_child(g)
+
+# A single hidden "wrong tree" in the forest ring — struck with the Rootblade it
+## dissolves into Essence + a truth (the S2 secret from the design map).
+func _build_wrong_tree(parent: Node3D) -> void:
+	var wt := WrongTree.new()
+	var p := Vector3(-16.0, 0.0, -9.0)
+	wt.position = Vector3(p.x, height_at(p.x, p.z), p.z)
+	parent.add_child(wt)
 
 # ------------------------------------------------------------ Loomstrata seams
 ## The machinery showing through nature: floating glowing wireframe seams and
