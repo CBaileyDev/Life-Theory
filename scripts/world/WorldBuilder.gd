@@ -340,8 +340,11 @@ func _scatter_giant_pines(parent: Node3D) -> void:
 	if _giant_pine_scenes.is_empty():
 		return
 	var biome_mult := 0.55 if biome == 1 else 1.0
-	var count := int(60 * density * biome_mult)
-	_scatter_mm(parent, _giant_pine_scenes, count, 0.8, 1.5, {
+	# The realistic card pines (~53k tris, alpha-MASK foliage) are heavier than the
+	# old flat cones, so a trimmed count + the GLB's generated LODs keep the dense
+	# treeline affordable.
+	var count := int(46 * density * biome_mult)
+	_scatter_mm(parent, _giant_pine_scenes, count, 0.85, 1.5, {
 		"avoid_clearing": true, "avoid_path": true, "avoid_pond": true,
 		"cull": CULL_TREE * 1.9,
 		"col_radius": 0.7, "col_height": 16.0, "y_offset": -0.2,
