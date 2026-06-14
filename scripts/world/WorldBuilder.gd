@@ -76,7 +76,7 @@ const SMALLTREE_GLBS := ["fir_sapling_medium"]
 # Hand-sculpted originals (Blender, from scratch) — boulders + the giant
 # Washington-style pine that towers over the canopy.
 const ROCK_GLBS := ["rock_boulder_01", "rock_boulder_02", "rock_slab_01", "rock_slab_02", "rock_tall_01"]
-const GIANT_PINE_GLBS := ["pine_giant_01", "pine_giant_02", "pine_giant_03"]
+const GIANT_PINE_GLBS := ["quiet_giant"]
 # A dense, wind-swayed grass carpet (own MultiMesh) is the floor's main life.
 const GRASS_GLB := "grass_medium_01"
 # Ground-cover scatter as a data table: [slug, count, scale_min, scale_max,
