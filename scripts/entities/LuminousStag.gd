@@ -22,20 +22,28 @@ func _ready() -> void:
 	GameState.world_state_changed.connect(_on_world_changed)
 	_set_active(GameState.world == GameState.World.FIRST_LAYER)
 
+# Generated mesh is normalised to ~2.0 units tall, centred on origin. Scale to a
+# ~2.2 m elk and lift so the feet rest at the body origin (matching the capsule).
+# Tune STAG_SCALE if the stag reads too large/small in-engine.
+const STAG_SCALE := 1.1
+
 func _build() -> void:
 	_body_root = Node3D.new()
 	add_child(_body_root)
-	var mat := MeshFactory.mat_emissive(Color(0.7, 1.0, 0.7, 0.9), 2.0, true)
-	_part(mat, Vector3(0.5, 0.5, 1.2), Vector3(0, 1.2, 0))          # torso
-	_part(mat, Vector3(0.3, 0.6, 0.3), Vector3(0, 1.6, -0.6), Vector3(deg_to_rad(-30), 0, 0))  # neck
-	_part(mat, Vector3(0.28, 0.28, 0.45), Vector3(0, 1.95, -0.85))  # head
-	for sx in [-1, 1]:
-		for sz in [-1, 1]:
-			_part(mat, Vector3(0.1, 0.85, 0.1), Vector3(sx * 0.18, 0.52, sz * 0.45))
+	# Prefer the generated mystical Luminous Stag (baked violet-blue emissive);
+	# fall back to the primitive blockout if the asset is missing.
+	var model_path := "res://assets/models/stag_spirit_glow.glb"
+	if ResourceLoader.exists(model_path):
+		var model := (load(model_path) as PackedScene).instantiate() as Node3D
+		model.scale = Vector3.ONE * STAG_SCALE
+		model.position.y = STAG_SCALE   # feet (local -1 * scale) up to the origin
+		_body_root.add_child(model)
+	else:
+		_build_primitive_body()
 	var light := OmniLight3D.new()
-	light.light_color = Color(0.7, 1.0, 0.7)
-	light.light_energy = 1.5
-	light.omni_range = 5.0
+	light.light_color = Color(0.62, 0.78, 1.0)   # violet-blue First-Layer glow
+	light.light_energy = 1.6
+	light.omni_range = 5.5
 	light.position.y = 1.4
 	_body_root.add_child(light)
 
@@ -46,6 +54,16 @@ func _build() -> void:
 	col.shape = shape
 	col.position.y = 1.0
 	add_child(col)
+
+## Primitive blockout fallback (used only if the GLB is unavailable).
+func _build_primitive_body() -> void:
+	var mat := MeshFactory.mat_emissive(Color(0.7, 1.0, 0.7, 0.9), 2.0, true)
+	_part(mat, Vector3(0.5, 0.5, 1.2), Vector3(0, 1.2, 0))          # torso
+	_part(mat, Vector3(0.3, 0.6, 0.3), Vector3(0, 1.6, -0.6), Vector3(deg_to_rad(-30), 0, 0))  # neck
+	_part(mat, Vector3(0.28, 0.28, 0.45), Vector3(0, 1.95, -0.85))  # head
+	for sx in [-1, 1]:
+		for sz in [-1, 1]:
+			_part(mat, Vector3(0.1, 0.85, 0.1), Vector3(sx * 0.18, 0.52, sz * 0.45))
 
 func _part(mat: Material, size: Vector3, pos: Vector3, rot := Vector3.ZERO) -> void:
 	var mi := MeshInstance3D.new()

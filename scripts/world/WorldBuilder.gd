@@ -73,6 +73,10 @@ var _grass_variants: Array = []
 # Photoscanned CC0 model scenes (decimated). Empty arrays => primitive fallback.
 const TREE_GLBS := ["pine_tree_01", "fir_tree_01", "tree_small_02"]
 const SMALLTREE_GLBS := ["fir_sapling_medium"]
+# Generated North Cascades saplings (Nanobanana Pro → Meshy). Resolved per-biome
+# via _nc(): the natural variant in the Quietwood, the bioluminescent First-Layer
+# variant in the Loomstrata. Mixed in with the CC0 fir sapling.
+const NC_SAPLING_BASES := ["tree_hemlock_sapling", "tree_cedar_sapling"]
 # Hand-sculpted originals (Blender, from scratch) — boulders + the giant
 # Washington-style pine that towers over the canopy.
 const ROCK_GLBS := ["mossy_granite"]
@@ -83,12 +87,21 @@ const GRASS_GLB := "grass_medium_01"
 # y_offset]. Each type becomes one MultiMeshInstance3D (one draw batch for the
 # whole world). Tuned per-asset because the source meshes vary wildly in size.
 const GROUND_COVER := [
-	["fern_02", 260, 0.55, 1.2, -0.05],
 	["shrub_01", 70, 0.7, 1.3, -0.05],
 	["nettle_plant", 70, 0.3, 0.6, -0.02],
 	["dry_branches", 130, 0.6, 1.2, 0.0],
 	["tree_stump_01", 22, 0.6, 1.1, -0.06],
 	["ultraviolet_mushroom", 16, 0.8, 1.7, -0.02],   # Meshy AI glowing accents (now 26k tris)
+]
+# Generated North Cascades ground cover (Nanobanana Pro → Meshy), resolved per
+# biome via _nc(): [base_slug, count, scale_min, scale_max, y_offset]. The CC0
+# fern_02 is superseded by the species-accurate sword/deer ferns below.
+const NC_GROUND_COVER := [
+	["fern_sword", 150, 0.45, 1.05, -0.04],
+	["fern_deer", 95, 0.45, 0.95, -0.04],
+	["moss_clump", 120, 0.4, 0.9, -0.03],
+	["pinecone_douglasfir", 80, 0.4, 0.9, 0.0],
+	["ivy_vine", 55, 0.45, 0.95, -0.02],
 ]
 var _tree_scenes: Array = []
 var _smalltree_scenes: Array = []
@@ -128,7 +141,11 @@ func _init(quality_density := 1.0, biome_id := 0, lod_mult := 1.0) -> void:
 	for c in [Color(0.20, 0.36, 0.18), Color(0.24, 0.40, 0.20), Color(0.18, 0.33, 0.16)]:
 		_grass_variants.append(MeshFactory.mat_foliage(c, 0.22))
 	_tree_scenes = _load_scenes(TREE_GLBS)
-	_smalltree_scenes = _load_scenes(SMALLTREE_GLBS)
+	# Saplings: the CC0 fir plus the generated hemlock/cedar (biome variant).
+	var sapling_slugs := SMALLTREE_GLBS.duplicate()
+	for b in NC_SAPLING_BASES:
+		sapling_slugs.append(_nc(b))
+	_smalltree_scenes = _load_scenes(sapling_slugs)
 	_rock_scenes = _load_scenes(ROCK_GLBS)
 	_giant_pine_scenes = _load_scenes(GIANT_PINE_GLBS)
 	var grass_path := "res://assets/models/%s.glb" % GRASS_GLB
@@ -145,6 +162,11 @@ func _load_scenes(slugs: Array) -> Array:
 
 func _pick(arr: Array):
 	return arr[rng.randi_range(0, arr.size() - 1)]
+
+## Resolve a generated asset's biome variant: the natural (photoreal daylight)
+## mesh in the Quietwood, the bioluminescent First-Layer mesh in the Loomstrata.
+func _nc(base: String) -> String:
+	return base + ("_glow" if biome == 1 else "_natural")
 
 func build(parent: Node3D) -> void:
 	_build_ground(parent)
@@ -468,6 +490,18 @@ func _scatter_foliage(parent: Node3D) -> void:
 	var biome_mult := 0.85 if biome == 1 else 1.0
 	for entry in GROUND_COVER:
 		var slug: String = entry[0]
+		var path := "res://assets/models/%s.glb" % slug
+		if not ResourceLoader.exists(path):
+			continue
+		var scene: PackedScene = load(path)
+		var count := int(entry[1] * density * biome_mult)
+		_scatter_mm(parent, [scene], count, entry[2], entry[3], {
+			"cull": CULL_GROUND, "y_offset": entry[4],
+			"cast_shadow": GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
+		})
+	# Generated North Cascades ground cover, biome-resolved (natural / glow).
+	for entry in NC_GROUND_COVER:
+		var slug: String = _nc(entry[0])
 		var path := "res://assets/models/%s.glb" % slug
 		if not ResourceLoader.exists(path):
 			continue
