@@ -4,11 +4,12 @@ extends CanvasLayer
 ## transient toast messages. Pure-code, dark-fantasy styling. Listens to
 ## GameState so it always reflects the live run.
 
+const BAR_W := 224.0
 var _quest_label: Label
 var _fragment_label: Label
 var _fragment_panel: Control
 var _prompt_label: Label
-var _health_fill: ColorRect
+var _health_fill: Panel
 var _health_label: Label
 var _toast_label: Label
 var _damage_vignette: ColorRect
@@ -18,10 +19,10 @@ var _dmg_dir: Label
 var _dmg_dir_tween: Tween
 var _toast_tween: Tween
 var _health_tween: Tween
-var _stamina_fill: ColorRect
+var _stamina_fill: Panel
 var _sight_box: VBoxContainer
-var _lucidity_fill: ColorRect
-var _desync_fill: ColorRect
+var _lucidity_fill: Panel
+var _desync_fill: Panel
 var _reagent_label: Label
 var _crosshair: Control
 var _hitmarker: Label
@@ -140,19 +141,10 @@ func _build() -> void:
 	root.add_child(hp_panel)
 	var hbox := VBoxContainer.new()
 	hp_panel.add_child(hbox)
-	_health_label = UITheme.make_label("Vitality", 13, UITheme.TEXT)
-	hbox.add_child(_health_label)
-	var bar_bg := ColorRect.new()
-	bar_bg.color = Color(0.1, 0.04, 0.05, 0.9)
-	bar_bg.custom_minimum_size = Vector2(220, 16)
-	hbox.add_child(bar_bg)
-	_health_fill = ColorRect.new()
-	_health_fill.color = Color(0.7, 0.25, 0.30)
-	_health_fill.position = Vector2.ZERO
-	_health_fill.size = Vector2(220, 16)
-	bar_bg.add_child(_health_fill)
+	hbox.add_theme_constant_override("separation", 5)
+	_health_fill = UITheme.make_stat_bar(hbox, "Vitality", BAR_W, 14.0, Color(0.80, 0.30, 0.32))
 	# Stamina bar (under health).
-	_stamina_fill = _make_sub_bar(hbox, "Stamina", Color(0.35, 0.6, 0.75))
+	_stamina_fill = _make_sub_bar(hbox, "Stamina", Color(0.40, 0.66, 0.80))
 	# Sight meters (hidden until the Sight is unlocked).
 	_sight_box = VBoxContainer.new()
 	_sight_box.visible = false
@@ -175,12 +167,9 @@ func _build() -> void:
 	root.add_child(_dmg_dir)
 
 	# Crosshair (centre dot) + hitmarker.
-	_crosshair = ColorRect.new()
-	_crosshair.color = Color(0.9, 0.95, 0.95, 0.5)
-	_crosshair.custom_minimum_size = Vector2(4, 4)
-	_crosshair.size = Vector2(4, 4)
+	_crosshair = UITheme.make_crosshair()
 	_crosshair.set_anchors_preset(Control.PRESET_CENTER)
-	_crosshair.position = Vector2(-2, -2)
+	_crosshair.position = Vector2(-2.5, -2.5)
 	root.add_child(_crosshair)
 	_hitmarker = UITheme.make_label("✕", 28, Color(1.0, 0.5, 0.5))
 	_hitmarker.set_anchors_preset(Control.PRESET_CENTER)
@@ -224,18 +213,11 @@ func _build() -> void:
 	_fps_label.visible = SettingsManager.show_fps
 	root.add_child(_fps_label)
 
-func _make_sub_bar(parent: VBoxContainer, label: String, color: Color) -> ColorRect:
-	parent.add_child(UITheme.make_label(label, 13, UITheme.TEXT))
-	var bg := ColorRect.new()
-	bg.color = Color(0.05, 0.07, 0.09, 0.9)
-	bg.custom_minimum_size = Vector2(220, 12)
-	parent.add_child(bg)
-	var fill := ColorRect.new()
-	fill.color = color
-	fill.position = Vector2.ZERO
-	fill.size = Vector2(220, 12)
-	bg.add_child(fill)
-	return fill
+func _make_sub_bar(parent: VBoxContainer, label: String, color: Color) -> Panel:
+	return UITheme.make_stat_bar(parent, label, BAR_W, 11.0, color)
+
+func _bar_sb(bar: Panel) -> StyleBoxFlat:
+	return bar.get_theme_stylebox("panel") as StyleBoxFlat
 
 # ---------------------------------------------------------------- fps counter
 func _unhandled_input(event: InputEvent) -> void:
@@ -276,22 +258,22 @@ func set_prompt(text: String) -> void:
 
 func set_stamina(frac: float) -> void:
 	if _stamina_fill:
-		_stamina_fill.size.x = 220.0 * clampf(frac, 0.0, 1.0)
+		_stamina_fill.size.x = BAR_W * clampf(frac, 0.0, 1.0)
 
 func _on_lucidity_changed(lucidity: float, maxv: float) -> void:
 	if _lucidity_fill:
-		_lucidity_fill.size.x = 220.0 * clampf(lucidity / maxv, 0.0, 1.0)
+		_lucidity_fill.size.x = BAR_W * clampf(lucidity / maxv, 0.0, 1.0)
 	_refresh_sight_vis()
 
 func _on_desync_changed(desync: float, maxv: float) -> void:
 	if _desync_fill:
 		var r := clampf(desync / maxv, 0.0, 1.0)
-		_desync_fill.size.x = 220.0 * r
+		_desync_fill.size.x = BAR_W * r
 		# Redden toward a warning as Desync nears the world-fray threshold.
 		if r > 0.65:
-			_desync_fill.color = Color(0.9, 0.3, 0.7).lerp(Color(1.0, 0.12, 0.12), (r - 0.65) / 0.35)
+			_bar_sb(_desync_fill).bg_color = Color(0.9, 0.3, 0.7).lerp(Color(1.0, 0.12, 0.12), (r - 0.65) / 0.35)
 		else:
-			_desync_fill.color = Color(0.9, 0.3, 0.7)
+			_bar_sb(_desync_fill).bg_color = Color(0.9, 0.3, 0.7)
 
 func _on_reagents_changed(count: int) -> void:
 	if _reagent_label:
@@ -306,13 +288,13 @@ func set_crosshair_active(active: bool) -> void:
 	if not _crosshair:
 		return
 	if active:
-		_crosshair.color = UITheme.GOLD
-		_crosshair.size = Vector2(7, 7)
-		_crosshair.position = Vector2(-3.5, -3.5)
+		_crosshair.modulate = UITheme.GOLD
+		_crosshair.size = Vector2(8, 8)
+		_crosshair.position = Vector2(-4, -4)
 	else:
-		_crosshair.color = Color(0.9, 0.95, 0.95, 0.5)
-		_crosshair.size = Vector2(4, 4)
-		_crosshair.position = Vector2(-2, -2)
+		_crosshair.modulate = Color(1, 1, 1, 1)
+		_crosshair.size = Vector2(5, 5)
+		_crosshair.position = Vector2(-2.5, -2.5)
 
 func hitmarker() -> void:
 	if not _hitmarker:
@@ -363,9 +345,9 @@ func _on_health_changed(health: float, max_health: float) -> void:
 	if _health_tween and _health_tween.is_valid():
 		_health_tween.kill()
 	_health_tween = create_tween().set_parallel(true)
-	_health_tween.tween_property(_health_fill, "size:x", 220.0 * frac, 0.25)
-	var col := Color(0.78, 0.22, 0.26).lerp(Color(0.45, 0.74, 0.45), frac)
-	_health_tween.tween_property(_health_fill, "color", col, 0.25)
+	_health_tween.tween_property(_health_fill, "size:x", BAR_W * frac, 0.25)
+	var col := Color(0.80, 0.24, 0.28).lerp(Color(0.46, 0.76, 0.46), frac)
+	_health_tween.tween_property(_bar_sb(_health_fill), "bg_color", col, 0.25)
 	# Brief red pulse when taking damage.
 	if frac < 1.0:
 		_damage_vignette.color.a = (1.0 - frac) * 0.35

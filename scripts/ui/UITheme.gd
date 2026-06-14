@@ -87,6 +87,49 @@ static func make_button(text: String, min_width := 260.0) -> Button:
 	b.add_theme_stylebox_override("focus", _btn_style(Color(0.10, 0.16, 0.16, 0.95), ACCENT))
 	return b
 
+## A clean rounded stat bar (track + fill). Returns the fill Panel; animate its
+## size.x in [0, width]. Small uppercase caption sits above it.
+static func make_stat_bar(parent: Node, caption: String, width := 224.0, height := 12.0, fill_color := ACCENT) -> Panel:
+	if caption != "":
+		var lbl := make_label(caption.to_upper(), 11, TEXT_DIM)
+		lbl.add_theme_constant_override("line_spacing", 2)
+		parent.add_child(lbl)
+	var track := Panel.new()
+	track.custom_minimum_size = Vector2(width, height)
+	var tb := StyleBoxFlat.new()
+	tb.bg_color = Color(0.02, 0.03, 0.04, 0.80)
+	tb.set_corner_radius_all(int(height * 0.5))
+	tb.set_border_width_all(1)
+	tb.border_color = Color(ACCENT_DIM.r, ACCENT_DIM.g, ACCENT_DIM.b, 0.45)
+	track.add_theme_stylebox_override("panel", tb)
+	parent.add_child(track)
+	var fill := Panel.new()
+	fill.position = Vector2.ZERO
+	fill.size = Vector2(width, height)
+	var fb := StyleBoxFlat.new()
+	fb.bg_color = fill_color
+	fb.set_corner_radius_all(int(height * 0.5))
+	# A subtle lighter top edge gives the fill a soft sheen.
+	fb.border_width_top = 1
+	fb.border_color = Color(minf(fill_color.r + 0.25, 1.0), minf(fill_color.g + 0.25, 1.0), minf(fill_color.b + 0.25, 1.0), 0.6)
+	fill.add_theme_stylebox_override("panel", fb)
+	track.add_child(fill)
+	return fill
+
+## A clean crosshair: a tiny dot with a faint dark outline for legibility on any
+## backdrop. Returns the dot Panel (recolour/resize for the interact state).
+static func make_crosshair() -> Panel:
+	var dot := Panel.new()
+	dot.custom_minimum_size = Vector2(5, 5)
+	dot.size = Vector2(5, 5)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.92, 0.96, 0.96, 0.7)
+	sb.set_corner_radius_all(3)
+	sb.set_border_width_all(1)
+	sb.border_color = Color(0, 0, 0, 0.55)
+	dot.add_theme_stylebox_override("panel", sb)
+	return dot
+
 static func fullscreen_dim(color := BG) -> ColorRect:
 	var r := ColorRect.new()
 	r.color = color
