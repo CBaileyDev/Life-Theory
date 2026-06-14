@@ -73,7 +73,10 @@ var _grass_variants: Array = []
 # Photoscanned CC0 model scenes (decimated). Empty arrays => primitive fallback.
 const TREE_GLBS := ["pine_tree_01", "fir_tree_01", "tree_small_02"]
 const SMALLTREE_GLBS := ["fir_sapling_medium"]
-const ROCK_GLBS := ["rock_moss_set_01", "rock_07"]
+# Hand-sculpted originals (Blender, from scratch) — boulders + the giant
+# Washington-style pine that towers over the canopy.
+const ROCK_GLBS := ["rock_boulder_01", "rock_boulder_02"]
+const GIANT_PINE_GLB := "pine_giant_01"
 # A dense, wind-swayed grass carpet (own MultiMesh) is the floor's main life.
 const GRASS_GLB := "grass_medium_01"
 # Ground-cover scatter as a data table: [slug, count, scale_min, scale_max,
@@ -85,11 +88,12 @@ const GROUND_COVER := [
 	["nettle_plant", 70, 0.3, 0.6, -0.02],
 	["dry_branches", 130, 0.6, 1.2, 0.0],
 	["tree_stump_01", 22, 0.6, 1.1, -0.06],
-	["mushroom_01", 16, 0.7, 1.5, -0.02],   # rare glowing accents, not litter
+	["mushroom_cluster_01", 18, 1.0, 2.2, -0.02],   # glowing original clusters, rare accents
 ]
 var _tree_scenes: Array = []
 var _smalltree_scenes: Array = []
 var _rock_scenes: Array = []
+var _giant_pine_scene: PackedScene = null
 var _grass_scene: PackedScene = null
 # Cache of extracted {mesh, xform} per PackedScene for MultiMesh building.
 var _mm_cache := {}
@@ -126,6 +130,9 @@ func _init(quality_density := 1.0, biome_id := 0, lod_mult := 1.0) -> void:
 	_tree_scenes = _load_scenes(TREE_GLBS)
 	_smalltree_scenes = _load_scenes(SMALLTREE_GLBS)
 	_rock_scenes = _load_scenes(ROCK_GLBS)
+	var pine_path := "res://assets/models/%s.glb" % GIANT_PINE_GLB
+	if ResourceLoader.exists(pine_path):
+		_giant_pine_scene = load(pine_path)
 	var grass_path := "res://assets/models/%s.glb" % GRASS_GLB
 	if ResourceLoader.exists(grass_path):
 		_grass_scene = load(grass_path)
@@ -145,6 +152,7 @@ func build(parent: Node3D) -> void:
 	_build_ground(parent)
 	_build_water(parent)
 	_build_boundary(parent)
+	_scatter_giant_pines(parent)
 	_scatter_trees(parent)
 	_scatter_understory(parent)
 	_scatter_rocks(parent)
@@ -282,6 +290,21 @@ func _build_boundary(parent: Node3D) -> void:
 # draw-call overhead (the headline optimization) and lets density climb into the
 # thousands for a genuinely lush floor at a fraction of the old cost.
 
+## Giant Washington-state pines — hand-sculpted ~20 m conifers that tower over
+## the canopy and ring the clearing (avoid_clearing keeps the centre open, so
+## they frame the bowl as a wall of giants). Culled far out since they read as
+## landmarks. A tall trunk collider stops the player walking through them.
+func _scatter_giant_pines(parent: Node3D) -> void:
+	if _giant_pine_scene == null:
+		return
+	var biome_mult := 0.55 if biome == 1 else 1.0
+	var count := int(60 * density * biome_mult)
+	_scatter_mm(parent, [_giant_pine_scene], count, 0.8, 1.5, {
+		"avoid_clearing": true, "avoid_path": true, "cull": CULL_TREE * 1.9,
+		"col_radius": 0.7, "col_height": 16.0, "y_offset": -0.2,
+		"ring_min": 15.0, "ring_max": 26.0,
+	})
+
 func _scatter_trees(parent: Node3D) -> void:
 	if _tree_scenes.is_empty():
 		_scatter_trees_primitive(parent)
@@ -409,13 +432,24 @@ func _scatter_mm(parent: Node3D, scenes: Array, count: int, smin: float, smax: f
 	var col_h: float = opts.get("col_height", 0.0)
 	var saplings: Array = opts.get("sapling_scenes", [])
 	var sap_chance: float = opts.get("sapling_chance", 0.0)
+	# Optional annulus placement: scatter in a ring [ring_min, ring_max] from the
+	# centre instead of the whole square — used to ring the world with giants.
+	var ring_min: float = opts.get("ring_min", 0.0)
+	var ring_max: float = opts.get("ring_max", AREA - 1.0)
 	var buckets := {}                # PackedScene -> Array[Transform3D]
 	var cols: Array = []             # [pos, radius, height] cylinders
 	var placed := 0
 	var attempts := 0
 	while placed < count and attempts < count * 6:
 		attempts += 1
-		var p := _random_point()
+		var p: Vector3
+		if ring_min > 0.0:
+			var ang := rng.randf_range(0.0, TAU)
+			# sqrt keeps the distribution area-uniform across the annulus
+			var rr := sqrt(rng.randf_range(ring_min * ring_min, ring_max * ring_max))
+			p = Vector3(cos(ang) * rr, 0.0, sin(ang) * rr)
+		else:
+			p = _random_point()
 		if avoid_clearing and _in_clearing(p):
 			continue
 		if avoid_path and _on_path(p):
