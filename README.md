@@ -21,11 +21,11 @@ This repository is a **complete, runnable Godot 4.x prototype** — the first
 
 | | |
 |---|---|
-| **Engine** | **Godot 4.x** (use 4.2+; **validated headlessly against 4.3-stable**) |
+| **Engine** | **Godot 4.6** (Forward+) |
 | **Renderer** | Forward+ (Vulkan / Metal via MoltenVK on macOS) |
 | **Language** | GDScript only — no native plugins, no platform-specific code |
-| **Art assets** | **None required** — the entire world is generated procedurally from engine primitives + custom materials/shaders |
-| **Audio assets** | **None required** — every cue + ambience is **synthesized procedurally at runtime** (royalty-free), and is transparently overridden if you drop files into `audio/` (see `audio/README.md`) |
+| **Art assets** | Bundled **CC0** photoscanned models (trees, rocks, ferns, grass) + CC0 PBR terrain textures + a CC0 sky HDRI, all in `assets/`. The world is still **assembled procedurally in code** (`WorldBuilder`): a custom splat-terrain shader, MultiMesh scatter, a reflective pond, glowing seams, god-ray shafts. No editor-authored scene tree. |
+| **Audio assets** | **None required** — every cue, ambience and music layer is **synthesized procedurally at runtime** (royalty-free) through a `Master→{Music,Ambience,SFX,UI}` bus mix; transparently overridden if you drop files into `audio/`. |
 
 Download Godot 4.x (Standard, *not* the .NET/C# build) from <https://godotengine.org/download>.
 
@@ -52,14 +52,22 @@ There is **no build step** and **no external dependency** to fetch.
 | Look | **Mouse** |
 | Sprint | **Shift** (hold, while moving forward) |
 | Jump | **Space** |
+| Dodge (i-frames) | **Left Ctrl** |
 | Interact | **E** |
 | Attack (Rootblade) | **Left Mouse** |
 | Cast Simulation Pulse *(after upgrade)* | **Right Mouse** |
+| The Sight (reveals wisp weak-seams) | **Q** / **F** · **R** = Lucid Cap |
 | Toggle camera (1st/3rd person) | **C** |
 | Journal / Inventory | **Tab** / **I** |
 | Pause | **Esc** |
 | Quick save / load | **F5** / **F9** |
 | Toggle FPS counter | **F3** (or Settings → *Show FPS*) |
+| **Gamepad** | Left stick move · right stick look · **A** jump · **B** dodge · **X** interact · **Y** Sight · **RB/RT** attack · **LB/LT** Pulse |
+
+> **Combat tip:** open **the Sight** (Q) during a fight — wisps expose a glowing
+> weak-seam and take far more damage, but the Sight drains Lucidity and raises
+> Desync; let it fray too far and it collapses. Pick **Stillwater Lilies** at the
+> pond to recover. Watch for the cold-violet **Dimmer**, which blinds you on a hit.
 
 ---
 
