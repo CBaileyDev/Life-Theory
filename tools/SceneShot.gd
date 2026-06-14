@@ -35,6 +35,9 @@ func _ready() -> void:
 			if OS.get_environment("SHOT_YAW") != "":
 				yaw = deg_to_rad(float(OS.get_environment("SHOT_YAW")))
 			pl.teleport(Vector3(float(parts[0]), float(parts[1]), float(parts[2])), yaw)
+			if OS.get_environment("SHOT_PITCH") != "" and pl.get("head"):
+				await get_tree().process_frame
+				pl.head.rotation.x = deg_to_rad(float(OS.get_environment("SHOT_PITCH")))
 	var elapsed := 0.0
 	while elapsed < secs:
 		elapsed += get_process_delta_time()

@@ -24,10 +24,19 @@ const DODGE_TIME := 0.32
 const DODGE_IFRAMES := 0.24
 const DODGE_COST := 28.0
 const DODGE_COOLDOWN := 0.6
+const CROUCH_SPEED := 2.4
+const STAND_HEIGHT := 1.8
+const CROUCH_HEIGHT := 1.15
+const STAND_HEAD_Y := 1.65
+const CROUCH_HEAD_Y := 1.02
 
 var _dodge_timer := 0.0     # >0 while a dodge is in progress
 var _dodge_cd := 0.0
 var _dodge_dir := Vector3.ZERO
+var _crouching := false
+var _crouch_t := 0.0        # 0 standing -> 1 crouched (smoothed)
+var _col: CollisionShape3D
+var _caps: CapsuleShape3D
 var fov_cinematic := false   # when true, scripted FOV tweens own the camera FOV
 
 func set_fov_cinematic(on: bool) -> void:
@@ -47,7 +56,7 @@ var _is_sprinting := false
 var _was_on_floor := true
 var _prev_fall := 0.0               # downward speed last frame, for landing impact
 var _hitstop := false
-const _HEAD_BASE := Vector3(0, 1.65, 0)
+var _head_base := Vector3(0, STAND_HEAD_Y, 0)   # camera height; lowers when crouched
 const _WEAPON_BASE := Vector3(0.32, -0.28, -0.55)
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 var _attack_timer := 0.0
@@ -106,13 +115,13 @@ func teleport(p: Vector3, yaw := 0.0) -> void:
 
 # --------------------------------------------------------------- construction
 func _build_body() -> void:
-	var col := CollisionShape3D.new()
-	var caps := CapsuleShape3D.new()
-	caps.radius = 0.4
-	caps.height = 1.8
-	col.shape = caps
-	col.position.y = 0.9
-	add_child(col)
+	_col = CollisionShape3D.new()
+	_caps = CapsuleShape3D.new()
+	_caps.radius = 0.4
+	_caps.height = STAND_HEIGHT
+	_col.shape = _caps
+	_col.position.y = STAND_HEIGHT * 0.5
+	add_child(_col)
 
 func _build_camera_rig() -> void:
 	head = Node3D.new()
@@ -225,10 +234,10 @@ func _process(delta: float) -> void:
 	if _trauma > 0.0:
 		_trauma = maxf(_trauma - delta * 1.6, 0.0)
 		var amt := _trauma * _trauma
-		head.position = _HEAD_BASE + Vector3(
+		head.position = _head_base + Vector3(
 			randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), 0.0) * 0.14 * amt
-	elif head.position != _HEAD_BASE:
-		head.position = _HEAD_BASE
+	else:
+		head.position = _head_base
 	# View-model bob while moving on the ground, plus transient swing recoil.
 	if weapon_pivot and weapon_pivot.visible:
 		var bob := Vector3.ZERO
@@ -342,8 +351,16 @@ func _physics_process(delta: float) -> void:
 	var input_dir := Vector2.ZERO if _dead else Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var dir := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
 
+	# Crouch (hold): lowers the camera + collision capsule, caps speed, and blocks
+	# sprint. Smoothed so the view dips/rises rather than snaps.
+	_crouching = not _dead and Input.is_action_pressed("crouch")
+	_crouch_t = move_toward(_crouch_t, 1.0 if _crouching else 0.0, delta * 8.0)
+	_caps.height = lerpf(STAND_HEIGHT, CROUCH_HEIGHT, _crouch_t)
+	_col.position.y = _caps.height * 0.5
+	_head_base.y = lerpf(STAND_HEAD_Y, CROUCH_HEAD_Y, _crouch_t)
+
 	var sprint_held := _sprint_toggled if SettingsManager.sprint_toggle else Input.is_action_pressed("sprint")
-	var wants_sprint := sprint_held and input_dir.y < 0.0
+	var wants_sprint := sprint_held and input_dir.y < 0.0 and not _crouching
 	var sprinting := wants_sprint and _stamina > 1.0
 	_is_sprinting = sprinting and dir.length() > 0.1
 	if sprinting:
@@ -352,7 +369,11 @@ func _physics_process(delta: float) -> void:
 		_stamina = minf(_stamina + STAMINA_REGEN * delta, STAMINA_MAX)
 	if _hud and _hud.has_method("set_stamina"):
 		_hud.set_stamina(_stamina / STAMINA_MAX)
-	var target_speed := (SPRINT_SPEED * GameState.sprint_multiplier) if sprinting else WALK_SPEED
+	var target_speed := WALK_SPEED
+	if sprinting:
+		target_speed = SPRINT_SPEED * GameState.sprint_multiplier
+	elif _crouching:
+		target_speed = CROUCH_SPEED
 	var horizontal := Vector3(velocity.x, 0, velocity.z)
 	if dir.length() > 0.01:
 		horizontal = horizontal.move_toward(dir * target_speed, ACCEL * delta)
