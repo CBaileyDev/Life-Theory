@@ -134,10 +134,13 @@ func _build() -> void:
 	_fragment_label = UITheme.make_label("Fragments  0/3", 18, UITheme.GOLD)
 	_fragment_panel.add_child(_fragment_label)
 
-	# Health bar (bottom-left).
+	# Health bar (bottom-left). Pin the BOTTOM edge ~20px above the screen bottom
+	# and grow UPWARD, so it never clips off-screen as the Sight meters appear.
 	var hp_panel := UITheme.make_panel()
 	hp_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	hp_panel.position = Vector2(20, -70)
+	hp_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	hp_panel.offset_left = 20
+	hp_panel.offset_bottom = -20
 	root.add_child(hp_panel)
 	var hbox := VBoxContainer.new()
 	hp_panel.add_child(hbox)
