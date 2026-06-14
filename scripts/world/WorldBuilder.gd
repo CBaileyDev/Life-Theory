@@ -76,7 +76,7 @@ const SMALLTREE_GLBS := ["fir_sapling_medium"]
 # Hand-sculpted originals (Blender, from scratch) — boulders + the giant
 # Washington-style pine that towers over the canopy.
 const ROCK_GLBS := ["rock_boulder_01", "rock_boulder_02"]
-const GIANT_PINE_GLB := "pine_giant_01"
+const GIANT_PINE_GLBS := ["pine_giant_01", "pine_giant_02", "pine_giant_03"]
 # A dense, wind-swayed grass carpet (own MultiMesh) is the floor's main life.
 const GRASS_GLB := "grass_medium_01"
 # Ground-cover scatter as a data table: [slug, count, scale_min, scale_max,
@@ -93,7 +93,7 @@ const GROUND_COVER := [
 var _tree_scenes: Array = []
 var _smalltree_scenes: Array = []
 var _rock_scenes: Array = []
-var _giant_pine_scene: PackedScene = null
+var _giant_pine_scenes: Array = []
 var _grass_scene: PackedScene = null
 # Cache of extracted {mesh, xform} per PackedScene for MultiMesh building.
 var _mm_cache := {}
@@ -130,9 +130,7 @@ func _init(quality_density := 1.0, biome_id := 0, lod_mult := 1.0) -> void:
 	_tree_scenes = _load_scenes(TREE_GLBS)
 	_smalltree_scenes = _load_scenes(SMALLTREE_GLBS)
 	_rock_scenes = _load_scenes(ROCK_GLBS)
-	var pine_path := "res://assets/models/%s.glb" % GIANT_PINE_GLB
-	if ResourceLoader.exists(pine_path):
-		_giant_pine_scene = load(pine_path)
+	_giant_pine_scenes = _load_scenes(GIANT_PINE_GLBS)
 	var grass_path := "res://assets/models/%s.glb" % GRASS_GLB
 	if ResourceLoader.exists(grass_path):
 		_grass_scene = load(grass_path)
@@ -338,11 +336,11 @@ func _build_boundary(parent: Node3D) -> void:
 ## they frame the bowl as a wall of giants). Culled far out since they read as
 ## landmarks. A tall trunk collider stops the player walking through them.
 func _scatter_giant_pines(parent: Node3D) -> void:
-	if _giant_pine_scene == null:
+	if _giant_pine_scenes.is_empty():
 		return
 	var biome_mult := 0.55 if biome == 1 else 1.0
 	var count := int(60 * density * biome_mult)
-	_scatter_mm(parent, [_giant_pine_scene], count, 0.8, 1.5, {
+	_scatter_mm(parent, _giant_pine_scenes, count, 0.8, 1.5, {
 		"avoid_clearing": true, "avoid_path": true, "avoid_pond": true,
 		"cull": CULL_TREE * 1.9,
 		"col_radius": 0.7, "col_height": 16.0, "y_offset": -0.2,
