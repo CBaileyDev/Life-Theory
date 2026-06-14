@@ -178,6 +178,10 @@ func _build_environment() -> void:
 	_dir.light_angular_distance = 1.2   # softer shadow penumbra
 	_dir.shadow_enabled = true
 	_dir.shadow_blur = 1.2
+	# Bound the shadow frustum to just past the playable bowl (AREA 24 + giant ring
+	# 26 + margin) so the PSSM splits pack sharp shadows into the area that matters
+	# instead of spreading over the ~100m default — sharper + cheaper.
+	_dir.directional_shadow_max_distance = 58.0
 	add_child(_dir)
 
 func _build_fireflies() -> void:
@@ -650,6 +654,7 @@ func _apply_graphics(quality: int) -> void:
 		_env.ssao_enabled = false
 		_env.volumetric_fog_enabled = false
 		vp.msaa_3d = Viewport.MSAA_DISABLED
+		vp.use_taa = false
 	elif quality == SettingsManager.Quality.HIGH:
 		_dir.shadow_enabled = true
 		# Four-split PSSM @ 2048 — crisp shadows for desktop GPUs.
@@ -661,7 +666,10 @@ func _apply_graphics(quality: int) -> void:
 		# into an opaque brown murk across the forest's long sightlines. Soft light
 		# shafts come from fog_sun_scatter instead — god-rays without the murk.
 		_env.volumetric_fog_enabled = false
-		vp.msaa_3d = Viewport.MSAA_4X
+		# 2X MSAA + TAA instead of 4X: TAA resolves sub-pixel foliage shimmer far
+		# better than MSAA (which barely helps alpha-tested edges) and is cheaper.
+		vp.msaa_3d = Viewport.MSAA_2X
+		vp.use_taa = true
 	else:  # Medium (default)
 		_dir.shadow_enabled = true
 		# Two-split @ 1536 — roughly half the shadow cost of High's 4 splits while
@@ -672,6 +680,7 @@ func _apply_graphics(quality: int) -> void:
 		_env.ssao_enabled = false
 		_env.volumetric_fog_enabled = false
 		vp.msaa_3d = Viewport.MSAA_2X
+		vp.use_taa = false
 	# Note: foliage/tree density is chosen at build time via _quality_density();
 	# changing quality mid-run updates lighting/AA immediately and full density
 	# on the next entry to the forest. Render scale is a separate user lever

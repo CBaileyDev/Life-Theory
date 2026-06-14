@@ -144,11 +144,13 @@ func _build_camera_rig() -> void:
 	ray.enabled = true
 	fp_camera.add_child(ray)
 
-	# Soft personal light so the First Layer stays readable at night.
+	# Soft personal light so the First Layer stays readable at night. Range kept
+	# tight (touches fewer foliage clusters per frame) and never casts shadows.
 	var lantern := OmniLight3D.new()
 	lantern.light_color = Color(0.7, 0.82, 1.0)
 	lantern.light_energy = 0.55
-	lantern.omni_range = 12.0
+	lantern.omni_range = 8.0
+	lantern.shadow_enabled = false
 	head.add_child(lantern)
 
 func _build_weapon() -> void:

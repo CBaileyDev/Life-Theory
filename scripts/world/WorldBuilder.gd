@@ -346,7 +346,9 @@ func _scatter_giant_pines(parent: Node3D) -> void:
 	var count := int(46 * density * biome_mult)
 	_scatter_mm(parent, _giant_pine_scenes, count, 0.85, 1.5, {
 		"avoid_clearing": true, "avoid_path": true, "avoid_pond": true,
-		"cull": CULL_TREE * 1.9,
+		"cull": CULL_TREE * 1.9, "cell_size": 14.0,
+		# Distant landmark silhouettes — skip the shadow pass (huge mesh × many).
+		"cast_shadow": GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
 		"col_radius": 0.7, "col_height": 16.0, "y_offset": -0.2,
 		"ring_min": 15.0, "ring_max": 26.0,
 	})
@@ -439,7 +441,7 @@ func _scatter_grass_carpet(parent: Node3D) -> void:
 		return
 	var count := int(8000 * density)
 	_scatter_mm(parent, [_grass_scene], count, 0.7, 1.7, {
-		"cull": CULL_GROUND * 1.4, "y_offset": -0.04,
+		"cull": CULL_GROUND * 1.4, "y_offset": -0.04, "cell_size": 8.0,
 		"mesh": MeshFactory.make_grass_card_mesh(),
 		"material_override": mat,
 		"vary_color": true,
@@ -495,7 +497,12 @@ func _scatter_mm(parent: Node3D, scenes: Array, count: int, smin: float, smax: f
 	# centre instead of the whole square — used to ring the world with giants.
 	var ring_min: float = opts.get("ring_min", 0.0)
 	var ring_max: float = opts.get("ring_max", AREA - 1.0)
-	var buckets := {}                # PackedScene -> Array[Transform3D]
+	# Spatial chunking: bucket placements into a grid of cells so each cell becomes
+	# its own MultiMeshInstance and frustum-culls independently (turning away from
+	# a cell stops paying for it). cell -> {scene -> Array[Transform3D]}.
+	var cell_size: float = opts.get("cell_size", 12.0)
+	var buckets := {}                # PackedScene -> { Vector2i cell -> Array[Transform3D] }
+	var all_by_scn := {}             # PackedScene -> Array[Transform3D] (for collision)
 	var cols: Array = []             # [pos, radius, height] cylinders
 	var placed := 0
 	var attempts := 0
@@ -536,16 +543,22 @@ func _scatter_mm(parent: Node3D, scenes: Array, count: int, smin: float, smax: f
 		var yaw := rng.randf_range(0.0, TAU)
 		var s := rng.randf_range(smin, smax)
 		var xf := Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3(s, s, s)), p)
+		var cell := Vector2i(int(floor((p.x + AREA) / cell_size)), int(floor((p.z + AREA) / cell_size)))
 		if not buckets.has(scn):
-			buckets[scn] = []
-		buckets[scn].append(xf)
+			buckets[scn] = {}
+			all_by_scn[scn] = []
+		if not buckets[scn].has(cell):
+			buckets[scn][cell] = []
+		buckets[scn][cell].append(xf)
+		all_by_scn[scn].append(xf)
 		if cr > 0.0:
 			cols.append([p, cr * s, ch * s])
 		placed += 1
 	for scn in buckets:
-		_build_mm(parent, scn, buckets[scn], opts)
+		for cell in buckets[scn]:
+			_build_mm(parent, scn, buckets[scn][cell], opts)
 		if opts.get("convex_collision", false):
-			_build_convex_collision(parent, scn, buckets[scn])
+			_build_convex_collision(parent, scn, all_by_scn[scn])
 	if not cols.is_empty():
 		_build_collision(parent, cols)
 
@@ -631,7 +644,16 @@ func _extract(scene: PackedScene) -> Dictionary:
 	var mi := _find_mesh(inst)
 	var data := {}
 	if mi and mi.mesh:
-		data = {"mesh": mi.mesh, "xform": _local_xform(mi, inst)}
+		# Force alpha-BLEND foliage (PolyHaven twigs/leaves/grass) to alpha-SCISSOR:
+		# scissor writes depth in the prepass, gets early-Z, sorts for free and casts
+		# crisp opaque shadows — a big fill/overdraw win on the most-instanced meshes.
+		var mesh: Mesh = mi.mesh
+		for si in mesh.get_surface_count():
+			var sm := mesh.surface_get_material(si)
+			if sm is BaseMaterial3D and (sm as BaseMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_ALPHA:
+				(sm as BaseMaterial3D).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+				(sm as BaseMaterial3D).alpha_scissor_threshold = 0.5
+		data = {"mesh": mesh, "xform": _local_xform(mi, inst)}
 	inst.free()
 	_mm_cache[scene] = data
 	return data
