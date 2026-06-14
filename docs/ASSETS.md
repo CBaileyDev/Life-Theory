@@ -25,6 +25,29 @@ to game-resolution** with `@gltf-transform/cli optimize --simplify-error` +
 `dequantize` (meshoptimizer), bringing all ten models to **~10 MB total** while
 preserving silhouette. Re-run that pipeline if you re-download higher-res sources.
 
+## AI-generated models (Meshy AI) — `assets/models/*.glb`
+North Cascades / Mt Baker–Snoqualmie themed set, generated via the
+**Nanobanana Pro → Meshy image-to-3D** pipeline (`tools/meshy_gen.sh`,
+`tools/meshy_batch.sh`). Each carries full PBR (base_color / metallic /
+roughness / normal) and was optimized with `@gltf-transform/cli optimize
+--texture-compress webp` (raw ~10–12 MB → ~1–2 MB, geometry preserved).
+Built in two world-states for the natural-forest → mushroom → mystical
+"First Layer" transition: `_natural` (photoreal daylight) and `_glow`
+(bioluminescent violet-blue emissive).
+
+- Ferns: `fern_sword_{natural,glow}` (Polystichum munitum), `fern_deer_{natural,glow}` (Blechnum spicant)
+- Small trees: `tree_hemlock_sapling_{natural,glow}` (Tsuga heterophylla), `tree_cedar_sapling_{natural,glow}` (Thuja plicata)
+- Pinecones: `pinecone_douglasfir_{natural,glow}` (Pseudotsuga menziesii)
+- Moss: `moss_clump_{natural,glow}`
+- Ivy: `ivy_vine_{natural,glow}`
+- Creature: `stag_spirit_glow` — the mystical Luminous Stag (First-Layer only)
+
+**License:** generated on a paid Meshy plan; per Meshy's Terms the account
+owner holds the rights to these outputs (commercial use permitted). Pine-needle
+floor and moss-ground are intentionally **not** modelled here — they belong as
+tiling PBR ground textures (source CC0 from ambientCG/Poly Haven; drive the glow
+via a shader emissive mask).
+
 ## Audio
 - None bundled. All sound is synthesized procedurally at runtime (`SfxSynth`).
 
