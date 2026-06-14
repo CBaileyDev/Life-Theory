@@ -153,6 +153,7 @@ func build(parent: Node3D) -> void:
 	_scatter_foliage(parent)
 	_build_wrong_tree(parent)
 	_build_overlook(parent)
+	_build_lilies(parent)
 	if biome == 1:
 		_build_seams(parent)
 	_build_trail(parent)
@@ -591,6 +592,16 @@ func _build_wrong_tree(parent: Node3D) -> void:
 	var p := Vector3(-16.0, 0.0, -9.0)
 	wt.position = Vector3(p.x, height_at(p.x, p.z), p.z)
 	parent.add_child(wt)
+
+## Stillwater Lilies floating on the pond — pick them up to purge Desync.
+func _build_lilies(parent: Node3D) -> void:
+	if biome != 0:
+		return
+	var spots := [Vector3(-10.5, 0, 8.0), Vector3(-13.0, 0, 10.0), Vector3(-9.5, 0, 11.0)]
+	for s in spots:
+		var lily := Lily.new()
+		lily.position = Vector3(s.x, WATER_LEVEL + 0.04, s.z)
+		parent.add_child(lily)
 
 ## The Cairn-Ridge overlook: a flat stone at the mound's peak and — in the
 ## Quietwood — a distant glowing RIFT (a huge wireframe seam + monolith

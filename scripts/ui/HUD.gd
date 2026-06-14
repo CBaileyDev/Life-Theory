@@ -285,7 +285,13 @@ func _on_lucidity_changed(lucidity: float, maxv: float) -> void:
 
 func _on_desync_changed(desync: float, maxv: float) -> void:
 	if _desync_fill:
-		_desync_fill.size.x = 220.0 * clampf(desync / maxv, 0.0, 1.0)
+		var r := clampf(desync / maxv, 0.0, 1.0)
+		_desync_fill.size.x = 220.0 * r
+		# Redden toward a warning as Desync nears the world-fray threshold.
+		if r > 0.65:
+			_desync_fill.color = Color(0.9, 0.3, 0.7).lerp(Color(1.0, 0.12, 0.12), (r - 0.65) / 0.35)
+		else:
+			_desync_fill.color = Color(0.9, 0.3, 0.7)
 
 func _on_reagents_changed(count: int) -> void:
 	if _reagent_label:
