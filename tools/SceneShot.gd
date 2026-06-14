@@ -21,6 +21,18 @@ func _ready() -> void:
 	if OS.get_environment("SHOT_TP") == "1":
 		await get_tree().process_frame
 		SettingsManager.set_third_person(true)
+	else:
+		await get_tree().process_frame
+		SettingsManager.set_third_person(false)
+	if OS.get_environment("SHOT_TELEPORT") != "":
+		await get_tree().process_frame
+		var parts := OS.get_environment("SHOT_TELEPORT").split(",")
+		var pl := get_tree().get_first_node_in_group("player")
+		if pl and parts.size() == 3:
+			var yaw := 0.0
+			if OS.get_environment("SHOT_YAW") != "":
+				yaw = deg_to_rad(float(OS.get_environment("SHOT_YAW")))
+			pl.teleport(Vector3(float(parts[0]), float(parts[1]), float(parts[2])), yaw)
 	var elapsed := 0.0
 	while elapsed < secs:
 		elapsed += get_process_delta_time()

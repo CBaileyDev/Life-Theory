@@ -63,16 +63,26 @@ var spring: SpringArm3D
 var tp_camera: Camera3D
 var ray: RayCast3D
 var weapon_pivot: Node3D
-var weapon_mesh: MeshInstance3D
+var weapon_mesh: Node3D
 var _hud   # untyped: HUD is accessed via duck-typing (set_prompt/flash_damage)
 
 const ProjectileScene := preload("res://scripts/combat/Projectile.gd")
+const RootbladeScene := preload("res://assets/models/rootblade.glb")
+const SeekerScene := preload("res://assets/models/seeker.glb")
+
+# Third-person avatar (the Seeker) + its held blade. Built in _ready, shown only
+# in third-person. The mesh is rigid, so motion is sold procedurally (bob/lean/
+# swing) rather than skeletal animation.
+var tp_body: Node3D
+var tp_sword: Node3D
+var _body_anim_t := 0.0
 
 func _ready() -> void:
 	add_to_group("player")
 	_build_body()
 	_build_camera_rig()
 	_build_weapon()
+	_build_tp_body()
 	_apply_camera_mode(SettingsManager.third_person)
 	_apply_fov(SettingsManager.fov)
 	SettingsManager.camera_mode_changed.connect(_apply_camera_mode)
@@ -117,13 +127,15 @@ func _build_camera_rig() -> void:
 
 	spring = SpringArm3D.new()
 	spring.name = "SpringArm"
-	spring.spring_length = 4.0
-	spring.position = Vector3(0.6, 0.2, 0)
+	spring.spring_length = 4.2
+	spring.position = Vector3(0.45, 0.18, 0)
+	spring.margin = 0.35
 	head.add_child(spring)
 	tp_camera = Camera3D.new()
 	tp_camera.name = "TPCamera"
 	tp_camera.fov = 75.0
 	tp_camera.position.z = 0.0
+	tp_camera.rotation_degrees = Vector3(-7.0, 0.0, 0.0)   # frame the Seeker from above
 	spring.add_child(tp_camera)
 
 	ray = RayCast3D.new()
@@ -140,67 +152,59 @@ func _build_camera_rig() -> void:
 	head.add_child(lantern)
 
 func _build_weapon() -> void:
-	# The Ancient Rootblade — grief crystallised: a knotted root handle, a stone
-	# leaf-blade, an emissive rune-edge, and a glowing seed at the guard. Held at
-	# the lower-right; tilted slightly for a natural ready pose.
+	# The Ancient Rootblade — grief crystallised: a knotted root grip, a pale
+	# crystalline leaf-blade veined with living teal light, and a glowing seed at
+	# the pommel. A high-res mesh sculpted in Blender, held as the first-person
+	# view-model at the lower-right, tilted for a natural ready pose.
 	weapon_pivot = Node3D.new()
 	weapon_pivot.name = "WeaponPivot"
-	weapon_pivot.position = Vector3(0.32, -0.28, -0.55)
-	weapon_pivot.rotation_degrees = Vector3(6, -8, 4)
+	weapon_pivot.position = Vector3(0.38, -0.32, -0.58)
+	weapon_pivot.rotation_degrees = Vector3(8, -10, 5)
 	fp_camera.add_child(weapon_pivot)
 
-	var bark := MeshFactory.mat_standard(Color(0.20, 0.14, 0.10), 0.85)
-	var stone := MeshFactory.mat_standard(Color(0.46, 0.48, 0.50), 0.55)
-	var rune := MeshFactory.mat_emissive(Color(0.45, 0.85, 0.75), 2.4)
+	var rb := RootbladeScene.instantiate()
+	rb.name = "RootbladeModel"
+	# The blade points +Y (up) in model space; held grip-down at the pivot.
+	rb.scale = Vector3.ONE * 0.56
+	rb.rotation_degrees = Vector3(-14.0, 0.0, 0.0)   # tip pitched slightly forward
+	rb.position = Vector3(0.0, 0.02, 0.0)
+	weapon_pivot.add_child(rb)
+	weapon_mesh = rb
 
-	# Root handle (slightly tapered, dark wood).
-	var handle := MeshInstance3D.new()
-	var hm := CylinderMesh.new()
-	hm.top_radius = 0.022
-	hm.bottom_radius = 0.03
-	hm.height = 0.16
-	hm.radial_segments = 6
-	handle.mesh = hm
-	handle.material_override = bark
-	handle.position.y = 0.0
-	weapon_pivot.add_child(handle)
+func _build_tp_body() -> void:
+	# The Seeker — a hooded forest-mystic, the body the player sees in third
+	# person. Parented to the root so it yaws with the player but never pitches
+	# with the look. A second Rootblade is set into the right hand.
+	tp_body = Node3D.new()
+	tp_body.name = "SeekerBody"
+	add_child(tp_body)
 
-	# Glowing seed at the guard.
-	var seed := MeshInstance3D.new()
-	var seed_m := SphereMesh.new()
-	seed_m.radius = 0.035
-	seed_m.height = 0.07
-	seed.mesh = seed_m
-	seed.material_override = MeshFactory.mat_emissive(Color(0.7, 1.0, 0.85), 3.2)
-	seed.position.y = 0.10
-	weapon_pivot.add_child(seed)
+	var seeker := SeekerScene.instantiate()
+	seeker.name = "SeekerModel"
+	# Blender +Y forward → Godot -Z forward, matching the player's facing.
+	seeker.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+	tp_body.add_child(seeker)
 
-	# Stone leaf-blade (tapered prism), held high so it reads in the frame.
-	weapon_mesh = MeshInstance3D.new()
-	var blade := PrismMesh.new()
-	blade.size = Vector3(0.11, 0.52, 0.035)
-	weapon_mesh.mesh = blade
-	weapon_mesh.material_override = stone
-	weapon_mesh.position.y = 0.40
-	weapon_pivot.add_child(weapon_mesh)
-
-	# Emissive rune-line down the blade's centre.
-	var edge := MeshInstance3D.new()
-	var em := BoxMesh.new()
-	em.size = Vector3(0.012, 0.46, 0.04)
-	edge.mesh = em
-	edge.material_override = rune
-	edge.position.y = 0.40
-	weapon_pivot.add_child(edge)
+	# Rootblade gripped in the right hand. The hand sits forward-right of the
+	# chest in model space; values mirror the Seeker's sculpted hand position.
+	tp_sword = RootbladeScene.instantiate()
+	tp_sword.name = "SeekerBlade"
+	tp_sword.position = Vector3(-0.14, 1.02, 0.40)
+	tp_sword.rotation_degrees = Vector3(-18.0, 0.0, -22.0)
+	tp_body.add_child(tp_sword)
 
 # ------------------------------------------------------------------ camera
 func _apply_camera_mode(third_person: bool) -> void:
 	if third_person:
 		tp_camera.current = true
 		weapon_pivot.visible = false
+		if tp_body:
+			tp_body.visible = true
 	else:
 		fp_camera.current = true
 		weapon_pivot.visible = true
+		if tp_body:
+			tp_body.visible = false
 
 func _toggle_camera() -> void:
 	SettingsManager.set_third_person(not SettingsManager.third_person)
@@ -245,6 +249,28 @@ func _process(delta: float) -> void:
 	if fp_camera and not SettingsManager.reduce_motion and not fov_cinematic:
 		var want := _base_fov + (8.0 if _is_sprinting else 0.0)
 		fp_camera.fov = lerpf(fp_camera.fov, want, clampf(delta * 8.0, 0, 1))
+	# Third-person avatar: rigid mesh, motion sold procedurally.
+	if tp_body and tp_body.visible:
+		_animate_tp_body(delta)
+
+# Procedural life for the Seeker in third person: a stride bounce + forward lean
+# while moving, a slow breathing bob when idle. The robe hides the lack of leg
+# articulation, so a rocking stride reads as walking without a skeleton.
+func _animate_tp_body(delta: float) -> void:
+	if SettingsManager.reduce_motion:
+		tp_body.position = Vector3.ZERO
+		tp_body.rotation = Vector3.ZERO
+		return
+	var hspeed := Vector2(velocity.x, velocity.z).length()
+	var moving := hspeed > 0.4
+	var run := clampf(hspeed / WALK_SPEED, 0.0, 1.8)
+	var freq := 7.5 if hspeed > WALK_SPEED + 0.5 else 5.2
+	_body_anim_t += delta * (freq if moving else 1.5)
+	var bob_amt := (0.055 * run) if moving else 0.012
+	tp_body.position = Vector3(0.0, absf(sin(_body_anim_t)) * bob_amt, 0.0)
+	var lean := deg_to_rad(8.0) * clampf(run, 0.0, 1.0) if moving else 0.0
+	tp_body.rotation.x = lerpf(tp_body.rotation.x, lean, clampf(delta * 8.0, 0.0, 1.0))
+	tp_body.rotation.z = sin(_body_anim_t) * deg_to_rad(2.5) * run
 
 # Right-stick look (gamepad). Mouse look stays in _unhandled_input; this runs
 # every frame so analog aiming is smooth and framerate-scaled.
@@ -479,13 +505,20 @@ func _dodge() -> void:
 		_weapon_kick += Vector3(0.0, 0.04, 0.06)
 
 func _swing_weapon() -> void:
-	if not weapon_pivot.visible:
-		return
-	# Recoil kick (settles via _process) layered under the arcing swing rotation.
-	_weapon_kick += Vector3(-0.02, 0.03, 0.12)
-	var t := create_tween()
-	t.tween_property(weapon_pivot, "rotation_degrees:z", -70.0, 0.08)
-	t.tween_property(weapon_pivot, "rotation_degrees:z", 0.0, 0.22)
+	if weapon_pivot and weapon_pivot.visible:
+		# Recoil kick (settles via _process) layered under the arcing swing.
+		_weapon_kick += Vector3(-0.02, 0.03, 0.12)
+		var t := create_tween()
+		t.tween_property(weapon_pivot, "rotation_degrees:z", -70.0, 0.08)
+		t.tween_property(weapon_pivot, "rotation_degrees:z", 0.0, 0.22)
+	# Third-person overhand chop on the held Rootblade.
+	if tp_body and tp_body.visible and tp_sword:
+		var base := Vector3(-18.0, 0.0, -22.0)
+		var t2 := create_tween()
+		t2.tween_property(tp_sword, "rotation_degrees", base + Vector3(86.0, -28.0, 44.0), 0.09)\
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		t2.tween_property(tp_sword, "rotation_degrees", base, 0.26)\
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 func _cast() -> void:
 	if not GameState.magic_unlocked or _cast_timer > 0.0:
