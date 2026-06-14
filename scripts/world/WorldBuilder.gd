@@ -154,6 +154,7 @@ func build(parent: Node3D) -> void:
 	_build_wrong_tree(parent)
 	_build_overlook(parent)
 	_build_lilies(parent)
+	_build_light_shafts(parent)
 	if biome == 1:
 		_build_seams(parent)
 	_build_trail(parent)
@@ -594,6 +595,33 @@ func _build_wrong_tree(parent: Node3D) -> void:
 	var p := Vector3(-16.0, 0.0, -9.0)
 	wt.position = Vector3(p.x, height_at(p.x, p.z), p.z)
 	parent.add_child(wt)
+
+## Soft god-ray shafts angled like the sun through the canopy, around the
+## clearing rim. Quietwood only (the Loomstrata runs cool/void).
+func _build_light_shafts(parent: Node3D) -> void:
+	if biome != 0:
+		return
+	var sh := load("res://shaders/light_shaft.gdshader") as Shader
+	if sh == null:
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	for i in 7:
+		var ang := TAU * i / 7.0 + rng.randf_range(-0.25, 0.25)
+		var r := CLEARING_RADIUS * rng.randf_range(0.35, 0.95)
+		var x := cos(ang) * r
+		var z := sin(ang) * r
+		var quad := MeshInstance3D.new()
+		var qm := QuadMesh.new()
+		var hgt := rng.randf_range(11.0, 15.0)
+		qm.size = Vector2(rng.randf_range(2.0, 3.4), hgt)
+		quad.mesh = qm
+		quad.material_override = mat
+		quad.position = Vector3(x, height_at(x, z) + hgt * 0.42, z)
+		# Lean along the sun (the dir light pitches ~-38°) with a varied yaw.
+		quad.rotation = Vector3(deg_to_rad(rng.randf_range(-30.0, -18.0)), ang + PI * 0.5, 0.0)
+		quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		parent.add_child(quad)
 
 ## Stillwater Lilies floating on the pond — pick them up to purge Desync.
 func _build_lilies(parent: Node3D) -> void:
