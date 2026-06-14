@@ -156,6 +156,15 @@ func _build_environment() -> void:
 	_env.volumetric_fog_albedo = Color(0.62, 0.66, 0.60)
 	_env.volumetric_fog_emission = Color(0.0, 0.0, 0.0)
 	_env.volumetric_fog_gi_inject = 0.4
+	# The Loomstrata is beneath the forest — its canopy opens onto void, not a
+	# blue daytime sky. Dark background + no sky reflection; the cool magical
+	# palette and the glowing wireframe seams read against the dark.
+	if GameState.current_biome == GameState.Biome.LOOMSTRATA:
+		_env.background_mode = Environment.BG_COLOR
+		_env.background_color = Color(0.018, 0.014, 0.045)
+		_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		_env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+		_env.ambient_light_energy = 0.7
 	we.environment = _env
 	add_child(we)
 

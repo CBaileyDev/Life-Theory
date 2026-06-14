@@ -145,6 +145,8 @@ func build(parent: Node3D) -> void:
 	_build_logs(parent)
 	_scatter_grass_carpet(parent)
 	_scatter_foliage(parent)
+	if biome == 1:
+		_build_seams(parent)
 	_build_trail(parent)
 	_build_runes(parent)
 	_build_sight_glyphs(parent)
@@ -172,6 +174,11 @@ func height_at(x: float, z: float) -> float:
 	var pd := Vector2(x - POND.x, z - POND.z).length()
 	if pd < POND_R:
 		h -= (1.0 - smoothstep(0.0, POND_R, pd)) * POND_DEPTH
+	# Loomstrata: the world stops pretending to be nature. Quantise the rolling
+	# ground into flat FAULT-TERRACES — resolution loss reads as faceting. The
+	# clearing/path stay flat (h≈0 → floors to 0), so traversal is unaffected.
+	if biome == 1:
+		h = floor(h / 0.55) * 0.55
 	return h
 
 func _build_ground(parent: Node3D) -> void:
@@ -561,6 +568,61 @@ func _scatter_foliage_primitive(parent: Node3D) -> void:
 		var g := MeshFactory.make_grass_tuft(rng, _pick(_grass_variants))
 		g.position = p
 		parent.add_child(g)
+
+# ------------------------------------------------------------ Loomstrata seams
+## The machinery showing through nature: floating glowing wireframe seams and
+## raw untextured grey blockout monoliths along the rim — "the simulation drops
+## its textures." Only built in the Loomstrata (biome 1).
+func _build_seams(parent: Node3D) -> void:
+	var grid_sh := load("res://shaders/seam_grid.gdshader") as Shader
+	# Floating grid seams.
+	for i in 26:
+		var p := _random_point()
+		if _in_clearing(p):
+			continue
+		var quad := MeshInstance3D.new()
+		var qm := QuadMesh.new()
+		var sz := rng.randf_range(1.6, 4.2)
+		qm.size = Vector2(sz, sz)
+		quad.mesh = qm
+		if grid_sh:
+			var sm := ShaderMaterial.new()
+			sm.shader = grid_sh
+			sm.set_shader_parameter("grid_color", Vector3(0.4, 0.7, 1.0) if rng.randf() < 0.6 else Vector3(0.7, 0.45, 1.0))
+			sm.set_shader_parameter("cells", rng.randf_range(3.0, 7.0))
+			quad.material_override = sm
+		else:
+			quad.material_override = MeshFactory.mat_emissive(Color(0.4, 0.7, 1.0), 2.0, true)
+		quad.position = Vector3(p.x, height_at(p.x, p.z) + rng.randf_range(0.4, 4.0), p.z)
+		quad.rotation = Vector3(rng.randf_range(-1.2, 1.2), rng.randf_range(0.0, TAU), rng.randf_range(-0.6, 0.6))
+		parent.add_child(quad)
+	# Raw blockout monoliths — untextured grey boxes, half-sunk and tilted.
+	var grey := MeshFactory.mat_standard(Color(0.32, 0.33, 0.38), 0.95)
+	var body := StaticBody3D.new()
+	body.name = "MonolithCollision"
+	for i in 14:
+		var p := _random_point()
+		if _in_clearing(p) or _on_path(p):
+			continue
+		var gy := height_at(p.x, p.z)
+		var mono := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		var w := rng.randf_range(0.8, 2.2)
+		var hh := rng.randf_range(1.5, 5.0)
+		bm.size = Vector3(w, hh, w * rng.randf_range(0.7, 1.3))
+		mono.mesh = bm
+		mono.material_override = grey
+		var tilt := Basis.from_euler(Vector3(rng.randf_range(-0.18, 0.18), rng.randf_range(0, TAU), rng.randf_range(-0.18, 0.18)))
+		var xf := Transform3D(tilt, Vector3(p.x, gy + hh * 0.3, p.z))
+		mono.transform = xf
+		parent.add_child(mono)
+		var cs := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = bm.size
+		cs.shape = box
+		cs.transform = xf
+		body.add_child(cs)
+	parent.add_child(body)
 
 # ------------------------------------------------------- hidden magical layer
 func _build_trail(parent: Node3D) -> void:

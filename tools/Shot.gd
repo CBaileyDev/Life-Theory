@@ -113,6 +113,11 @@ func _build_environment(magical: bool, _biome: int) -> void:
 		env.ambient_light_energy = 0.6
 	env.sky = sky
 	env.background_mode = Environment.BG_SKY
+	if magical:
+		# Loomstrata preview: void background, no sky reflection (matches Forest).
+		env.background_mode = Environment.BG_COLOR
+		env.background_color = Color(0.018, 0.014, 0.045)
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 	env.fog_light_color = Color(0.72, 0.74, 0.64) if not magical else Color(0.40, 0.46, 0.66)
