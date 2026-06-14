@@ -16,6 +16,8 @@ func _ready() -> void:
 		secs = float(OS.get_environment("SHOT_SECS"))
 	if OS.get_environment("SHOT_QUALITY") != "":
 		SettingsManager.set_quality(int(OS.get_environment("SHOT_QUALITY")))
+	if OS.get_environment("SHOT_BIOME") != "":
+		GameState.current_biome = int(OS.get_environment("SHOT_BIOME"))
 	var scn := (load(path) as PackedScene).instantiate()
 	add_child(scn)
 	if OS.get_environment("SHOT_TP") == "1":
