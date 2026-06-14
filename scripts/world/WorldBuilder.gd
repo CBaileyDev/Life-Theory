@@ -809,7 +809,10 @@ func _build_seams(parent: Node3D) -> void:
 		quad.position = Vector3(p.x, height_at(p.x, p.z) + rng.randf_range(0.4, 4.0), p.z)
 		quad.rotation = Vector3(rng.randf_range(-1.2, 1.2), rng.randf_range(0.0, TAU), rng.randf_range(-0.6, 0.6))
 		parent.add_child(quad)
-	# Raw blockout monoliths — untextured grey boxes, half-sunk and tilted.
+	# Ancient runed standing-stones (hand-sculpted menhirs, glowing sigil + mossy
+	# crown), half-sunk and tilted — replacing the old grey blockout boxes.
+	var mono_path := "res://assets/models/rune_monolith_01.glb"
+	var mono_scene: PackedScene = load(mono_path) if ResourceLoader.exists(mono_path) else null
 	var grey := MeshFactory.mat_standard(Color(0.32, 0.33, 0.38), 0.95)
 	var body := StaticBody3D.new()
 	body.name = "MonolithCollision"
@@ -818,22 +821,31 @@ func _build_seams(parent: Node3D) -> void:
 		if _in_clearing(p) or _on_path(p):
 			continue
 		var gy := height_at(p.x, p.z)
-		var mono := MeshInstance3D.new()
-		var bm := BoxMesh.new()
-		var w := rng.randf_range(0.8, 2.2)
-		var hh := rng.randf_range(1.5, 5.0)
-		bm.size = Vector3(w, hh, w * rng.randf_range(0.7, 1.3))
-		mono.mesh = bm
-		mono.material_override = grey
-		var tilt := Basis.from_euler(Vector3(rng.randf_range(-0.18, 0.18), rng.randf_range(0, TAU), rng.randf_range(-0.18, 0.18)))
-		var xf := Transform3D(tilt, Vector3(p.x, gy + hh * 0.3, p.z))
-		mono.transform = xf
-		parent.add_child(mono)
+		var s := rng.randf_range(0.8, 1.7)
+		# Turn the runed face (-Z in Godot) toward the clearing centre, with a
+		# little jitter and a slight lean, so the sigils watch inward.
+		var face := atan2(p.x, p.z) + rng.randf_range(-0.4, 0.4)
+		var rot := Basis.from_euler(Vector3(rng.randf_range(-0.1, 0.1),
+				face, rng.randf_range(-0.1, 0.1)))
+		var pos := Vector3(p.x, gy - 0.18 * s, p.z)   # plant the base into the ground
+		if mono_scene:
+			var mono := mono_scene.instantiate()
+			mono.transform = Transform3D(rot.scaled(Vector3(s, s, s)), pos)
+			parent.add_child(mono)
+		else:
+			var mb := MeshInstance3D.new()
+			var bm := BoxMesh.new()
+			bm.size = Vector3(1.15, 3.6, 0.62) * s
+			mb.mesh = bm
+			mb.material_override = grey
+			mb.transform = Transform3D(rot, pos + rot.y * (1.8 * s))
+			parent.add_child(mb)
+		# Collision: a box hull of the slab (≈1.15 × 3.6 × 0.62 at scale 1).
 		var cs := CollisionShape3D.new()
 		var box := BoxShape3D.new()
-		box.size = bm.size
+		box.size = Vector3(1.15, 3.6, 0.62) * s
 		cs.shape = box
-		cs.transform = xf
+		cs.transform = Transform3D(rot, pos + rot.y * (1.8 * s))
 		body.add_child(cs)
 	parent.add_child(body)
 
