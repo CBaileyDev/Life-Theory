@@ -7,10 +7,15 @@ extends Node
 signal graphics_changed(quality: int)
 signal camera_mode_changed(third_person: bool)
 signal fov_changed(fov: float)
+signal show_fps_changed(on: bool)
 
 enum Quality { LOW, MEDIUM, HIGH }
 
 const CONFIG_PATH := "user://settings.cfg"
+
+# True until a settings file is loaded — lets us auto-pick a safe quality on the
+# very first launch (e.g. Low + reduced render scale on Apple/integrated GPUs).
+var _first_run := true
 
 # Common 16:9 resolutions offered in the settings menu.
 const RESOLUTIONS: Array[Vector2i] = [
@@ -29,6 +34,7 @@ var master_volume: float = 0.9
 var fov: float = 75.0
 var invert_y: bool = false
 var render_scale: float = 1.0   # 3D resolution scale (perf lever for weak HW)
+var show_fps: bool = false      # on-screen FPS counter (toggle in-game with F3)
 
 # Accessibility / gameplay
 enum Difficulty { STORY, SEEKER, TRIAL }
@@ -52,20 +58,46 @@ func difficulty_name(i := -1) -> String:
 
 func _ready() -> void:
 	load_settings()
+	if _first_run:
+		_auto_detect_quality()
 	apply_window_settings()
 	get_viewport().scaling_3d_scale = render_scale
 	var bus := AudioServer.get_bus_index("Master")
 	AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(master_volume, 0.0001)))
+
+## First-launch only: pick a safe default quality + render scale from the GPU so
+## the game is smooth out of the box on weak/integrated hardware (the M5 target)
+## while still ramping up on a discrete desktop GPU. The user can override any of
+## this in Settings; once they do, the persisted choice wins (never re-detected).
+func _auto_detect_quality() -> void:
+	var gpu := RenderingServer.get_video_adapter_name().to_lower()
+	if gpu.contains("apple") or gpu.contains("intel") or gpu.contains("integrated") \
+			or gpu.contains("llvmpipe") or gpu.contains("software") or gpu.contains("swiftshader"):
+		# Apple Silicon / integrated: favour a stable frame rate over crispness.
+		graphics_quality = Quality.LOW
+		render_scale = 0.7
+	elif gpu.contains("nvidia") or gpu.contains("geforce") or gpu.contains("rtx") \
+			or gpu.contains("radeon") or gpu.contains("rx ") or gpu.contains("arc"):
+		graphics_quality = Quality.HIGH
+		render_scale = 1.0
+	else:
+		graphics_quality = Quality.MEDIUM
+		render_scale = 0.85
+	save_settings()  # persist so this only ever happens once
+	print("[Settings] First run on '%s' -> %s, render_scale %.2f"
+			% [RenderingServer.get_video_adapter_name(), quality_name(), render_scale])
 
 # ---------------------------------------------------------------- persistence
 func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(CONFIG_PATH) != OK:
 		return
+	_first_run = false
 	graphics_quality = cfg.get_value("video", "quality", graphics_quality)
 	fullscreen = cfg.get_value("video", "fullscreen", fullscreen)
 	resolution_index = cfg.get_value("video", "resolution_index", resolution_index)
 	render_scale = cfg.get_value("video", "render_scale", render_scale)
+	show_fps = cfg.get_value("video", "show_fps", show_fps)
 	mouse_sensitivity = cfg.get_value("input", "mouse_sensitivity", mouse_sensitivity)
 	third_person = cfg.get_value("input", "third_person", third_person)
 	invert_y = cfg.get_value("input", "invert_y", invert_y)
@@ -83,6 +115,7 @@ func save_settings() -> void:
 	cfg.set_value("video", "fullscreen", fullscreen)
 	cfg.set_value("video", "resolution_index", resolution_index)
 	cfg.set_value("video", "render_scale", render_scale)
+	cfg.set_value("video", "show_fps", show_fps)
 	cfg.set_value("input", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("input", "third_person", third_person)
 	cfg.set_value("input", "invert_y", invert_y)
@@ -133,6 +166,14 @@ func set_render_scale(v: float) -> void:
 	render_scale = clampf(v, 0.5, 1.0)
 	get_viewport().scaling_3d_scale = render_scale
 	save_settings()
+
+func set_show_fps(on: bool) -> void:
+	show_fps = on
+	show_fps_changed.emit(show_fps)
+	save_settings()
+
+func toggle_show_fps() -> void:
+	set_show_fps(not show_fps)
 
 func set_difficulty(i: int) -> void:
 	difficulty = clampi(i, Difficulty.STORY, Difficulty.TRIAL)

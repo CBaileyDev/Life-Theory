@@ -3,7 +3,8 @@ shader_type spatial;
 // sways on its own phase derived from its world position, with more movement
 // toward the top of the mesh so trunks/bases stay planted. Lighting is left to
 // Godot's default PBR. Cheap and macOS/Windows-portable.
-render_mode cull_disabled;
+// The foliage primitives (cones/spheres/prisms) are closed solids, so default
+// back-face culling is correct and halves their rasterized triangles.
 
 uniform vec3 albedo : source_color = vec3(0.13, 0.27, 0.16);
 uniform float roughness = 0.92;

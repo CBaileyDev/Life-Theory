@@ -17,22 +17,28 @@ var _env: Environment
 var _dir: DirectionalLight3D
 var _world: WorldBuilder
 var _transition_mat: ShaderMaterial
+var _transition_rect: ColorRect
 var _fireflies: GPUParticles3D
 var _sky_mat: ProceduralSkyMaterial
 var _beacon: Node3D
 var _beacon_diamond: Node3D
 var _player   # untyped: Player is accessed via duck-typing (teleport/fp_camera)
 var _transformed := false
+var _base_ambient_energy := 1.0          # natural ambient (depends on HDRI vs procedural sky)
+var _transform_tweens: Array[Tween] = [] # tracked so a quick-load can cancel them
+const _FIREFLY_BASE_AMOUNT := 80
 
 func _ready() -> void:
 	_build_environment()
-	_world = WorldBuilder.new(_quality_density(), GameState.current_biome)
+	_world = WorldBuilder.new(_quality_density(), GameState.current_biome, _quality_cull_mult())
 	var world_root := Node3D.new()
 	world_root.name = "World"
 	add_child(world_root)
 	_world.build(world_root)
 	_place_entities(world_root)
 	_build_fireflies()
+	_build_atmosphere_motes()
+	_build_pond_sound()
 	_build_transition_overlay()
 	_build_beacon()
 	_build_ui()
@@ -47,14 +53,17 @@ func _ready() -> void:
 	elif GameState.current_biome == GameState.Biome.LOOMSTRATA:
 		# Descended into the layer beneath — already magical, themed deeper.
 		_transformed = true
-		_apply_magical_palette()
-		_reveal_hidden()
+		_apply_magical_palette(true)
+		_reveal_hidden(true)
 		GameState.broadcast()
 		GameState.toast.emit("You descend. The Loomstrata hums beneath the forest.")
+		# Auralis marks the arrival with a short orientation once the scene settles.
+		get_tree().create_timer(2.0).timeout.connect(func():
+			GameState.request_dialogue("Auralis", Content.LOOMSTRATA_ARRIVAL))
 	else:
 		GameState.broadcast()
 		GameState.toast.emit("A quiet forest. A narrow trail. Something glows ahead.")
-	AudioManager.play_ambience("forest_day")
+	AudioManager.play_ambience("loomstrata" if GameState.current_biome == GameState.Biome.LOOMSTRATA else "forest_day")
 	AudioManager.play_music("layer" if GameState.world == GameState.World.FIRST_LAYER else "calm")
 	_start_ambient_life()
 
@@ -82,7 +91,11 @@ func _build_environment() -> void:
 	var sky := Sky.new()
 	# Real image-based lighting: a CC0 HDRI panorama lights and reflects on the
 	# whole scene (the biggest realism lever). Falls back to a procedural sky.
-	var hdr_path := "res://assets/hdri/forest_sky.hdr"
+	# A clean daytime SKY panorama (not the old forest panorama, which made the
+	# canopy open onto "a forest within a forest"). Real blue sky + clouds.
+	var hdr_path := "res://assets/hdri/sky_day.hdr"
+	if not ResourceLoader.exists(hdr_path):
+		hdr_path = "res://assets/hdri/forest_sky.hdr"
 	if ResourceLoader.exists(hdr_path):
 		var psm := PanoramaSkyMaterial.new()
 		psm.panorama = load(hdr_path)
@@ -90,7 +103,12 @@ func _build_environment() -> void:
 		_sky_mat = null
 		_env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 		_env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+		# Fixed WARM fill, NOT sky-derived: the HDR-bright blue sky would otherwise
+		# tint the shadowed forest floor blue (it read as see-through water).
+		_env.ambient_light_color = Color(0.50, 0.52, 0.43)
+		_env.ambient_light_sky_contribution = 0.0
 		_env.ambient_light_energy = 1.0
+		_base_ambient_energy = 1.0
 	else:
 		_sky_mat = ProceduralSkyMaterial.new()
 		_sky_mat.sky_top_color = Color(0.10, 0.16, 0.22)
@@ -102,36 +120,53 @@ func _build_environment() -> void:
 		_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		_env.ambient_light_color = Color(0.35, 0.42, 0.40)
 		_env.ambient_light_energy = 0.6
+		_base_ambient_energy = 0.6
 	_env.sky = sky
 	_env.background_mode = Environment.BG_SKY
+	# Fog as a gentle DEPTH CUE, not a wall. Warm sage tint, low density, with
+	# aerial perspective + sun in-scatter so distance reads as haze and the sun
+	# side glows (cheap god-ray feel). The old teal 0.018 wall is gone.
 	_env.fog_enabled = true
-	_env.fog_light_color = Color(0.45, 0.55, 0.52)
-	_env.fog_density = 0.018
-	_env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	_env.tonemap_exposure = 1.05
+	_env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
+	_env.fog_light_color = Color(0.72, 0.74, 0.64)
+	_env.fog_light_energy = 1.0
+	_env.fog_density = 0.0045
+	_env.fog_sun_scatter = 0.3
+	_env.fog_aerial_perspective = 0.55
+	_env.fog_sky_affect = 0.35
+	_env.tonemap_mode = Environment.TONE_MAPPER_AGX
+	_env.tonemap_exposure = 1.1
+	_env.tonemap_white = 6.0
 	_env.glow_enabled = true
-	_env.glow_intensity = 0.6
-	_env.glow_strength = 1.1
-	_env.glow_bloom = 0.15
-	_env.glow_hdr_threshold = 0.92
+	_env.glow_intensity = 0.5
+	_env.glow_strength = 1.05
+	_env.glow_bloom = 0.12
+	_env.glow_hdr_threshold = 0.95
 	# Cinematic colour grade (cheap GPU adjustment).
 	_env.adjustment_enabled = true
 	_env.adjustment_brightness = 1.02
 	_env.adjustment_contrast = 1.06
 	_env.adjustment_saturation = 1.16
 	# Volumetric fog base config (enabled only on High in _apply_graphics).
-	_env.volumetric_fog_density = 0.018
-	_env.volumetric_fog_albedo = Color(0.55, 0.62, 0.60)
+	# Density is deliberately LOW — at 0.018 the fog accumulated into an opaque
+	# brown murk wall across a ~50 m horizontal sightline; 0.005 gives soft light
+	# shafts in the mist without swallowing the view. Length is bounded too.
+	_env.volumetric_fog_density = 0.005
+	_env.volumetric_fog_length = 48.0
+	_env.volumetric_fog_albedo = Color(0.62, 0.66, 0.60)
 	_env.volumetric_fog_emission = Color(0.0, 0.0, 0.0)
-	_env.volumetric_fog_gi_inject = 0.3
+	_env.volumetric_fog_gi_inject = 0.4
 	we.environment = _env
 	add_child(we)
 
 	_dir = DirectionalLight3D.new()
-	_dir.rotation_degrees = Vector3(-50, -120, 0)
-	_dir.light_color = Color(0.98, 0.95, 0.86)
-	_dir.light_energy = 1.0
+	# Low warm sun raking through the trees → long shadows + god-ray scatter.
+	_dir.rotation_degrees = Vector3(-38, -115, 0)
+	_dir.light_color = Color(1.0, 0.93, 0.78)
+	_dir.light_energy = 1.5
+	_dir.light_angular_distance = 1.2   # softer shadow penumbra
 	_dir.shadow_enabled = true
+	_dir.shadow_blur = 1.2
 	add_child(_dir)
 
 func _build_fireflies() -> void:
@@ -156,6 +191,44 @@ func _build_fireflies() -> void:
 	_fireflies.position = Vector3(0, 2, 0)
 	add_child(_fireflies)
 
+## Slow daytime pollen/dust drifting through the air — specks that catch the
+## sun and give the volume of the forest weight. Cheap; one GPUParticles batch.
+## Positional water ambience at the pond — grows audible as you approach it.
+func _build_pond_sound() -> void:
+	var p := AudioStreamPlayer3D.new()
+	p.stream = SfxSynth.water_loop()
+	p.bus = "Ambience"
+	p.unit_size = 5.0
+	p.max_distance = 24.0
+	p.volume_db = -9.0
+	p.position = Vector3(WorldBuilder.POND.x, WorldBuilder.WATER_LEVEL + 0.2, WorldBuilder.POND.z)
+	add_child(p)
+	p.play()
+
+func _build_atmosphere_motes() -> void:
+	var motes := GPUParticles3D.new()
+	var mat := ParticleProcessMaterial.new()
+	mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	mat.emission_box_extents = Vector3(24, 6, 24)
+	mat.direction = Vector3(0.4, -0.2, 0.1)   # a faint prevailing drift
+	mat.spread = 80.0
+	mat.gravity = Vector3(0.1, -0.15, 0.0)
+	mat.initial_velocity_min = 0.05
+	mat.initial_velocity_max = 0.25
+	mat.scale_min = 0.5
+	mat.scale_max = 1.4
+	mat.color = Color(0.95, 0.9, 0.72, 0.5)
+	motes.process_material = mat
+	var qm := QuadMesh.new()
+	qm.size = Vector2(0.05, 0.05)
+	qm.material = MeshFactory.mat_emissive(Color(1.0, 0.95, 0.78), 2.2, true)
+	motes.draw_pass_1 = qm
+	motes.amount = 220
+	motes.lifetime = 12.0
+	motes.preprocess = 6.0   # already drifting when the scene opens
+	motes.position = Vector3(0, 5, 0)
+	add_child(motes)
+
 # --------------------------------------------------------------- entities
 func _on_ground(pos: Vector3, lift := 0.0) -> Vector3:
 	return Vector3(pos.x, _world.height_at(pos.x, pos.z) + lift, pos.z)
@@ -169,12 +242,14 @@ func _place_entities(root: Node3D) -> void:
 	auralis.position = _on_ground(WorldBuilder.AURALIS_POS)
 	root.add_child(auralis)
 
-	# A small pack of wisps makes the encounter a real fight.
-	var wisp_offsets := [Vector3.ZERO, Vector3(4, 0, 2), Vector3(-3, 0, 4)]
-	for off in wisp_offsets:
-		var wisp := CorruptedWisp.new()
-		wisp.position = _on_ground(WorldBuilder.WISP_HOME + off)
-		root.add_child(wisp)
+	# A mixed pack — two Corrupted Wisps and one Dimmer (blinds you) — so the
+	# fight has a priority target and isn't three identical threats.
+	var wisp_specs := [[Vector3.ZERO, false], [Vector3(4, 0, 2), false], [Vector3(-3, 0, 4), true]]
+	for spec in wisp_specs:
+		var w: CorruptedWisp = Dimmer.new() if spec[1] else CorruptedWisp.new()
+		w.position = _on_ground(WorldBuilder.WISP_HOME + spec[0])
+		root.add_child(w)
+		w.set_height_sampler(_world.height_at)
 
 	var stag := LuminousStag.new()
 	stag.position = _on_ground(WorldBuilder.STAG_POS, 0.5)
@@ -201,16 +276,20 @@ func _build_transition_overlay() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 7
 	add_child(layer)
-	var rect := ColorRect.new()
-	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_transition_rect = ColorRect.new()
+	_transition_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_transition_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The transition shader reads the screen texture (forces a back-buffer copy +
+	# fullscreen pass). It only runs for ~1.5s during the transformation, so keep
+	# the rect hidden — and therefore skipped — the rest of the time.
+	_transition_rect.visible = false
 	_transition_mat = ShaderMaterial.new()
 	var sh := load("res://shaders/screen_transition.gdshader")
 	if sh:
 		_transition_mat.shader = sh
 		_transition_mat.set_shader_parameter("progress", 0.0)
-		rect.material = _transition_mat
-	layer.add_child(rect)
+		_transition_rect.material = _transition_mat
+	layer.add_child(_transition_rect)
 
 func _build_beacon() -> void:
 	# A glowing vertical beam + bobbing diamond that marks the current
@@ -240,7 +319,11 @@ func _build_beacon() -> void:
 	_beacon.add_child(_beacon_diamond)
 	_beacon.visible = false
 
+var _combat_music_on := false
+var _music_check_t := 0.0
+
 func _process(delta: float) -> void:
+	_update_combat_music(delta)
 	if not _beacon:
 		return
 	var pos = _objective_position()
@@ -252,6 +335,28 @@ func _process(delta: float) -> void:
 	var tt := Time.get_ticks_msec() / 1000.0
 	_beacon_diamond.position.y = 2.4 + sin(tt * 2.0) * 0.25
 	_beacon_diamond.rotation.y += delta * 2.0
+
+## Crossfade to the tense combat theme while any wisp is actively hunting, and
+## back to the layer theme once the clearing is safe again. Polled (cheap), only
+## in the First Layer where wisps exist.
+func _update_combat_music(delta: float) -> void:
+	if GameState.world != GameState.World.FIRST_LAYER:
+		return
+	_music_check_t -= delta
+	if _music_check_t > 0.0:
+		return
+	_music_check_t = 0.6
+	var hostile := false
+	for e in get_tree().get_nodes_in_group("enemy"):
+		if e is CorruptedWisp and (e.state == CorruptedWisp.State.CHASE or e.state == CorruptedWisp.State.ATTACK):
+			hostile = true
+			break
+	if hostile and not _combat_music_on:
+		_combat_music_on = true
+		AudioManager.play_music("combat")
+	elif not hostile and _combat_music_on:
+		_combat_music_on = false
+		AudioManager.play_music("layer")
 
 func _objective_position():
 	var step := GameState.quest_step
@@ -300,17 +405,27 @@ func _play_transformation() -> void:
 	# Camera FOV punch.
 	var cam = _player.get("fp_camera") if _player else null
 	if cam:
-		var ct := create_tween()
+		var ct := _track(create_tween())
 		ct.tween_property(cam, "fov", 95.0, 0.3)
 		ct.tween_property(cam, "fov", 75.0, 0.9)
 	# Screen distortion + flash, palette swap at the peak.
-	var t := create_tween()
+	var t := _track(create_tween())
 	t.tween_method(_set_transition, 0.0, 1.0, 0.35)
 	t.tween_callback(_apply_magical_palette)
 	t.tween_callback(_reveal_hidden)
 	t.tween_interval(0.1)
 	t.tween_method(_set_transition, 1.0, 0.0, 1.3)
 	t.tween_callback(_show_title_card)
+
+func _track(t: Tween) -> Tween:
+	_transform_tweens.append(t)
+	return t
+
+func _kill_transform_tweens() -> void:
+	for t in _transform_tweens:
+		if t and t.is_valid():
+			t.kill()
+	_transform_tweens.clear()
 
 func _show_title_card() -> void:
 	var layer := CanvasLayer.new()
@@ -338,42 +453,93 @@ func _show_title_card() -> void:
 	t.tween_callback(layer.queue_free)
 
 func _set_transition(v: float) -> void:
+	if _transition_rect:
+		_transition_rect.visible = v > 0.001
 	if _transition_mat:
 		_transition_mat.set_shader_parameter("progress", v)
 
-func _apply_magical_palette() -> void:
-	# Cooler, denser, more luminous.
-	var t := create_tween().set_parallel(true)
-	t.tween_property(_dir, "light_color", Color(0.6, 0.72, 0.98), 1.0)
-	t.tween_property(_dir, "light_energy", 0.7, 1.0)
-	t.tween_property(_env, "fog_light_color", Color(0.35, 0.42, 0.62), 1.0)
-	t.tween_property(_env, "fog_density", 0.028, 1.0)
-	t.tween_property(_env, "ambient_light_color", Color(0.30, 0.36, 0.52), 1.0)
-	t.tween_property(_env, "ambient_light_energy", 0.55, 1.5)
-	if _sky_mat:
-		t.tween_property(_sky_mat, "sky_top_color", Color(0.10, 0.06, 0.20), 1.5)
-		t.tween_property(_sky_mat, "sky_horizon_color", Color(0.24, 0.20, 0.42), 1.5)
-		t.tween_property(_sky_mat, "ground_horizon_color", Color(0.14, 0.12, 0.24), 1.5)
+func _apply_magical_palette(instant := false) -> void:
+	# Cooler, denser, more luminous. Tweened during the live transformation;
+	# applied instantly when restoring a save that's already in the First Layer.
+	if instant:
+		_dir.light_color = Color(0.6, 0.72, 0.98)
+		_dir.light_energy = 0.85
+		_env.fog_light_color = Color(0.40, 0.46, 0.66)
+		_env.fog_density = 0.008
+		_env.fog_sun_scatter = 0.15
+		_env.ambient_light_color = Color(0.30, 0.36, 0.52)
+		_env.ambient_light_energy = 0.6
+		if _sky_mat:
+			_sky_mat.sky_top_color = Color(0.10, 0.06, 0.20)
+			_sky_mat.sky_horizon_color = Color(0.24, 0.20, 0.42)
+			_sky_mat.ground_horizon_color = Color(0.14, 0.12, 0.24)
+	else:
+		var t := _track(create_tween().set_parallel(true))
+		t.tween_property(_dir, "light_color", Color(0.6, 0.72, 0.98), 1.0)
+		t.tween_property(_dir, "light_energy", 0.85, 1.0)
+		t.tween_property(_env, "fog_light_color", Color(0.40, 0.46, 0.66), 1.0)
+		t.tween_property(_env, "fog_density", 0.008, 1.0)
+		t.tween_property(_env, "ambient_light_color", Color(0.30, 0.36, 0.52), 1.0)
+		t.tween_property(_env, "ambient_light_energy", 0.55, 1.5)
+		if _sky_mat:
+			t.tween_property(_sky_mat, "sky_top_color", Color(0.10, 0.06, 0.20), 1.5)
+			t.tween_property(_sky_mat, "sky_horizon_color", Color(0.24, 0.20, 0.42), 1.5)
+			t.tween_property(_sky_mat, "ground_horizon_color", Color(0.14, 0.12, 0.24), 1.5)
 	_env.glow_intensity = 0.95
 	_env.adjustment_saturation = 1.28
 	_env.volumetric_fog_emission = Color(0.16, 0.10, 0.30)
 	_env.volumetric_fog_albedo = Color(0.45, 0.50, 0.66)
-	# Fireflies turn cool and multiply.
+	# Fireflies turn cool and denser. Absolute count (not *1.5 each call) so a
+	# load doesn't keep multiplying the swarm.
 	var ppm := _fireflies.process_material as ParticleProcessMaterial
 	if ppm:
 		ppm.color = Color(0.6, 0.85, 1.0, 0.85)
-		_fireflies.amount = int(_fireflies.amount * 1.5)
+	_fireflies.amount = int(_FIREFLY_BASE_AMOUNT * 1.5)
 
-func _reveal_hidden() -> void:
+## Instantly restore the natural (pre-transformation) look — used when a save
+## from the natural forest is loaded after the world had already turned magical.
+func _apply_natural_palette() -> void:
+	_dir.light_color = Color(1.0, 0.93, 0.78)
+	_dir.light_energy = 1.5
+	_env.fog_light_color = Color(0.72, 0.74, 0.64)
+	_env.fog_density = 0.0045
+	_env.fog_sun_scatter = 0.3
+	_env.ambient_light_color = Color(0.50, 0.52, 0.43)
+	_env.ambient_light_energy = _base_ambient_energy
+	_env.glow_intensity = 0.6
+	_env.adjustment_saturation = 1.16
+	_env.volumetric_fog_emission = Color(0.0, 0.0, 0.0)
+	_env.volumetric_fog_albedo = Color(0.55, 0.62, 0.60)
+	if _sky_mat:
+		_sky_mat.sky_top_color = Color(0.10, 0.16, 0.22)
+		_sky_mat.sky_horizon_color = Color(0.30, 0.34, 0.30)
+		_sky_mat.ground_horizon_color = Color(0.16, 0.18, 0.15)
+	var ppm := _fireflies.process_material as ParticleProcessMaterial
+	if ppm:
+		ppm.color = Color(1.0, 0.9, 0.55, 0.8)
+	_fireflies.amount = _FIREFLY_BASE_AMOUNT
+
+func _reveal_hidden(instant := false) -> void:
 	for i in _world.trail_markers.size():
 		var m: Node3D = _world.trail_markers[i]
 		m.visible = true
-		m.scale = Vector3(0.1, 0.1, 0.1)
-		var tw := create_tween()
-		tw.tween_interval(i * 0.03)
-		tw.tween_property(m, "scale", Vector3.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		if instant:
+			m.scale = Vector3.ONE
+		else:
+			m.scale = Vector3(0.1, 0.1, 0.1)
+			var tw := _track(create_tween())
+			tw.tween_interval(i * 0.03)
+			tw.tween_property(m, "scale", Vector3.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	for q in _world.rune_quads:
 		q.visible = true
+
+## Re-hide the magical layer (trail markers + runes) — used when a natural-world
+## save is loaded after the layer had been revealed.
+func _hide_hidden() -> void:
+	for m in _world.trail_markers:
+		m.visible = false
+	for q in _world.rune_quads:
+		q.visible = false
 
 func _burst_at_shrine() -> void:
 	var p := GPUParticles3D.new()
@@ -409,6 +575,16 @@ func _quality_density() -> float:
 		return 1.2
 	return 0.85
 
+func _quality_cull_mult() -> float:
+	# How far scatter renders before fading out. Low pulls foliage in to recover
+	# fill rate on weak GPUs; High extends draw distance for desktop cards.
+	var q := SettingsManager.graphics_quality
+	if q == SettingsManager.Quality.LOW:
+		return 0.6
+	elif q == SettingsManager.Quality.HIGH:
+		return 1.15
+	return 0.85
+
 func _apply_graphics(quality: int) -> void:
 	var vp := get_viewport()
 	if quality == SettingsManager.Quality.LOW:
@@ -419,19 +595,30 @@ func _apply_graphics(quality: int) -> void:
 		vp.msaa_3d = Viewport.MSAA_DISABLED
 	elif quality == SettingsManager.Quality.HIGH:
 		_dir.shadow_enabled = true
+		# Four-split PSSM @ 2048 — crisp shadows for desktop GPUs.
+		_dir.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+		RenderingServer.directional_shadow_atlas_set_size(2048, true)
 		_env.glow_enabled = true
 		_env.ssao_enabled = true
-		_env.volumetric_fog_enabled = true   # soft light shafts in the mist
+		# Volumetric fog is intentionally OFF: even at low density it accumulated
+		# into an opaque brown murk across the forest's long sightlines. Soft light
+		# shafts come from fog_sun_scatter instead — god-rays without the murk.
+		_env.volumetric_fog_enabled = false
 		vp.msaa_3d = Viewport.MSAA_4X
 	else:  # Medium (default)
 		_dir.shadow_enabled = true
+		# Two-split @ 1536 — roughly half the shadow cost of High's 4 splits while
+		# still reading as real grounded shadows.
+		_dir.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+		RenderingServer.directional_shadow_atlas_set_size(1536, true)
 		_env.glow_enabled = true
 		_env.ssao_enabled = false
 		_env.volumetric_fog_enabled = false
 		vp.msaa_3d = Viewport.MSAA_2X
 	# Note: foliage/tree density is chosen at build time via _quality_density();
 	# changing quality mid-run updates lighting/AA immediately and full density
-	# on the next entry to the forest.
+	# on the next entry to the forest. Render scale is a separate user lever
+	# (SettingsManager.render_scale) so presets never fight the Render Scale slider.
 
 # ---------------------------------------------------------------- save/load
 func _unhandled_input(event: InputEvent) -> void:
@@ -443,6 +630,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		GameState.toast.emit("Progress loaded.")
 
 func _restore_save() -> void:
+	# Cancel any in-flight transformation tweens first so a mid-transformation
+	# quick-load can't keep animating over the freshly-loaded state.
+	_kill_transform_tweens()
 	var data := SaveManager.load_game()
 	if data.is_empty():
 		GameState.broadcast()
@@ -450,16 +640,20 @@ func _restore_save() -> void:
 	GameState.from_dict(data)
 	if data.has("player_position") and _player:
 		_player.teleport(data["player_position"], data.get("player_yaw", 0.0))
-	# Restore which specific fragments were already collected.
-	var collected: Array = data.get("fragments_collected", [])
-	if collected.size() > 0:
-		for f in get_tree().get_nodes_in_group("fragment"):
-			if f.index in collected:
-				f.set_collected_silently()
-	# If we load into the First Layer, snap the palette/hidden layer on without
-	# replaying the transformation animation.
+	# Restore which specific fragments were already collected. collected_ids is the
+	# single source of truth (see GameState.from_dict / SaveManager).
+	for f in get_tree().get_nodes_in_group("fragment"):
+		if f.index in GameState.collected_ids:
+			f.set_collected_silently()
+	# Snap the world look to the loaded state INSTANTLY (both directions), so
+	# loading never replays the animation nor strands the magical palette.
+	_set_transition(0.0)
 	if GameState.world == GameState.World.FIRST_LAYER:
 		_transformed = true
-		_apply_magical_palette()
-		_reveal_hidden()
+		_apply_magical_palette(true)
+		_reveal_hidden(true)
+	else:
+		_transformed = false
+		_apply_natural_palette()
+		_hide_hidden()
 	GameState.broadcast()

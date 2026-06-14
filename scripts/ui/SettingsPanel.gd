@@ -118,6 +118,12 @@ func _build() -> void:
 	inv.toggled.connect(func(on): SettingsManager.set_invert_y(on))
 	v.add_child(_row("Invert Look (Y)", inv))
 
+	# On-screen FPS counter (also toggled in-game with F3)
+	var fps := CheckBox.new()
+	fps.button_pressed = SettingsManager.show_fps
+	fps.toggled.connect(func(on): SettingsManager.set_show_fps(on))
+	v.add_child(_row("Show FPS (F3)", fps))
+
 	# ---- Accessibility & gameplay ----
 	v.add_child(_spacer(6))
 	v.add_child(UITheme.make_label("Accessibility & Gameplay", 16, UITheme.ACCENT))

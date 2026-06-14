@@ -49,6 +49,9 @@ static func make_label(text: String, size := 18, color := TEXT) -> Label:
 static func make_title(text: String, size := 56) -> Label:
 	var l := make_label(text, size, ACCENT)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# A dark outline keeps the title legible over a bright, busy 3D backdrop.
+	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.75))
+	l.add_theme_constant_override("outline_size", maxi(3, size / 10))
 	return l
 
 static func _btn_style(bg: Color, border: Color) -> StyleBoxFlat:

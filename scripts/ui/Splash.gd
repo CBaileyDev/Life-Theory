@@ -37,10 +37,14 @@ func _ready() -> void:
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(hint)
 
-	# "Sight-flicker" reveal: the title stutters into being.
+	# "Sight-flicker" reveal: the title stutters into being. Honour reduce-motion
+	# by fading in smoothly instead of strobing.
 	var t := create_tween()
-	for a in [0.0, 0.9, 0.1, 1.0, 0.3, 1.0]:
-		t.tween_property(title, "modulate:a", a, 0.09)
+	if SettingsManager.reduce_motion:
+		t.tween_property(title, "modulate:a", 1.0, 0.8)
+	else:
+		for a in [0.0, 0.9, 0.1, 1.0, 0.3, 1.0]:
+			t.tween_property(title, "modulate:a", a, 0.09)
 	t.tween_property(sub, "modulate:a", 1.0, 0.6)
 	t.tween_interval(1.6)
 	t.tween_callback(_advance)

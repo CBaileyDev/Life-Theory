@@ -95,12 +95,19 @@ func get_prompt() -> String:
 
 func interact(_player: Node) -> void:
 	var lines: Array
-	if not GameState.guide_met:
+	var was_met := GameState.guide_met
+	if not was_met:
 		lines = Content.AURALIS_FIRST
 	elif GameState.quest_complete:
 		lines = Content.AURALIS_DONE
+	elif GameState.quest_step == GameState.Step.RETURN_SHRINE:
+		# All fragments gathered — point the player back at the shrine instead of
+		# repeating a stale "one truth remains" hint.
+		lines = Content.AURALIS_RETURN
 	else:
 		# Hint scales with how many fragments remain.
-		lines = Content.AURALIS_HINTS[clampi(GameState.fragments, 0, 2)]
+		lines = Content.AURALIS_HINTS[clampi(GameState.fragments, 0, Content.AURALIS_HINTS.size() - 1)]
 	GameState.request_dialogue("Auralis", lines)
-	GameState.meet_guide()
+	# Only the first conversation advances the quest; later chats are flavour.
+	if not was_met:
+		GameState.meet_guide()

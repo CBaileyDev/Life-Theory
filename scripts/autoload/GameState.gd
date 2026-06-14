@@ -35,6 +35,8 @@ signal fragments_changed(collected: int, total: int)
 signal health_changed(health: float, max_health: float)
 signal player_damaged(amount: float)
 signal player_died
+# A Dimmer's strike clouds your sight for `duration` seconds (HUD darkens).
+signal dim_applied(duration: float)
 # The Sight (perceive the simulation). Fictional/mystical mechanic.
 signal sight_toggled(active: bool)
 signal lucidity_changed(lucidity: float, maxv: float)
@@ -64,6 +66,7 @@ var max_health: float = 100.0
 var health: float = 100.0
 var sprint_multiplier: float = 1.0
 var melee_damage: float = 34.0          # 3 hits to kill a 100hp wisp
+var sight_weakpoint_mult: float = 1.8   # bonus damage to a wisp struck while the Sight is open
 var magic_unlocked: bool = false
 var magic_damage_mult: float = 1.0
 var damage_reduction: float = 0.0
@@ -96,8 +99,10 @@ func reset_run() -> void:
 	acquired_upgrades = []
 	max_health = 100.0
 	health = 100.0
+	player_invuln = false
 	sprint_multiplier = 1.0
 	melee_damage = 34.0
+	sight_weakpoint_mult = 1.8
 	magic_unlocked = false
 	magic_damage_mult = 1.0
 	damage_reduction = 0.0
@@ -153,11 +158,13 @@ func meet_guide() -> void:
 func collect_fragment() -> void:
 	fragments = mini(fragments + 1, FRAGMENT_TOTAL)
 	fragments_changed.emit(fragments, FRAGMENT_TOTAL)
-	AudioManager.play("fragment_pickup")
+	# Each shard sings a step higher — the three pickups form a rising triad.
+	AudioManager.play("fragment_pickup", 0.0, 0.9 + fragments * 0.16)
 	forest_essence += 10
 	grant_reagents(1)
 	add_lucidity(20.0)
 	if fragments >= FRAGMENT_TOTAL and quest_step == Step.COLLECT_FRAGMENTS:
+		AudioManager.play("upgrade_select", -3.0)   # the triad resolves: a payoff chord
 		set_step(Step.RETURN_SHRINE)
 		toast.emit("All fragments gathered. Return to the shrine.")
 
@@ -171,36 +178,29 @@ func reach_shrine() -> bool:
 	return false
 
 func _apply_upgrade(id: String) -> void:
-	match id:
-		"heart_of_bark":
-			max_health += 60.0
-			health = max_health
-		"fleet_hidden_path":
-			sprint_multiplier = 1.6
-		"rootblade_strength":
-			melee_damage += 40.0
-		"simulation_pulse":
-			magic_unlocked = true
-		"bark_skin":
-			max_health += 40.0
-			health = max_health
-		"ironwood":
-			max_health += 40.0
-			health = max_health
-			damage_reduction = clampf(damage_reduction + 0.15, 0.0, 0.8)
-		"fleetfoot":
-			sprint_multiplier = 1.9
-		"windstep":
-			sprint_multiplier = 2.2
-		"keen_edge":
-			melee_damage += 40.0
-		"grovecleaver":
-			melee_damage += 80.0
-		"pulse_power":
-			magic_damage_mult = 1.6
-		"pulse_storm":
-			magic_damage_mult = 2.2
+	# Effects live as data on SkillTree.PATHS — look the node up and apply it
+	# generically. An unknown id is a loud bug, never a silent no-op.
+	var node := SkillTree.find_node(id)
+	if node.is_empty():
+		push_error("GameState._apply_upgrade: unknown upgrade id '%s'." % id)
+		return
+	_apply_effect(node.get("effect", {}))
 	health_changed.emit(health, max_health)
+
+## Apply a data-described effect to this state. Supports add / set / flag /
+## clamp sub-dicts plus a heal_full convenience (see SkillTree for the schema).
+func _apply_effect(eff: Dictionary) -> void:
+	for f in eff.get("add", {}):
+		set(f, get(f) + eff["add"][f])
+	for f in eff.get("set", {}):
+		set(f, eff["set"][f])
+	for f in eff.get("flag", {}):
+		set(f, eff["flag"][f])
+	for f in eff.get("clamp", {}):
+		var lohi: Array = eff["clamp"][f]
+		set(f, clampf(get(f), lohi[0], lohi[1]))
+	if eff.get("heal_full", false):
+		health = max_health
 
 func _grant_upgrade(id: String) -> void:
 	if acquired_upgrades.has(id):
@@ -220,6 +220,9 @@ func choose_upgrade(id: String) -> void:
 
 ## Spend Forest Essence to acquire another upgrade. Returns true on success.
 func buy_upgrade(id: String) -> bool:
+	if SkillTree.find_node(id).is_empty():
+		push_error("GameState.buy_upgrade: unknown upgrade id '%s'." % id)
+		return false
 	if has_upgrade(id) or forest_essence < UPGRADE_COST:
 		return false
 	forest_essence -= UPGRADE_COST
@@ -229,6 +232,11 @@ func buy_upgrade(id: String) -> bool:
 
 ## Buy a Seeker-Path node (honours prerequisite + cost). Returns true on success.
 func buy_node(id: String, cost: int, req: String) -> bool:
+	# Validate the id BEFORE touching essence, so a future typo fails loudly
+	# instead of silently charging the player for a no-op.
+	if SkillTree.find_node(id).is_empty():
+		push_error("GameState.buy_node: unknown upgrade id '%s'." % id)
+		return false
 	if has_upgrade(id):
 		return false
 	if req != "" and not has_upgrade(req):
@@ -241,8 +249,10 @@ func buy_node(id: String, cost: int, req: String) -> bool:
 	return true
 
 # ------------------------------------------------------------------- health
+var player_invuln: bool = false   # true during a dodge's i-frames
+
 func damage_player(amount: float) -> void:
-	if health <= 0.0:
+	if health <= 0.0 or player_invuln:
 		return
 	amount *= (1.0 - damage_reduction)
 	health = maxf(health - amount, 0.0)
@@ -265,7 +275,7 @@ func unlock_sight() -> void:
 	if sight_unlocked:
 		return
 	sight_unlocked = true
-	toast.emit("The Sight stirs.  [Q] to perceive the layer  ·  [R] Lucid Cap")
+	toast.emit("The Sight stirs.  [Q] perceive — and strike a wisp's weak-seam.  [R] Lucid Cap")
 
 func can_open_sight() -> bool:
 	return sight_unlocked and lucidity > 5.0 and desync < MAX_DESYNC
@@ -322,6 +332,7 @@ func to_dict() -> Dictionary:
 		"health": health,
 		"sprint_multiplier": sprint_multiplier,
 		"melee_damage": melee_damage,
+		"sight_weakpoint_mult": sight_weakpoint_mult,
 		"magic_unlocked": magic_unlocked,
 		"magic_damage_mult": magic_damage_mult,
 		"damage_reduction": damage_reduction,
@@ -349,11 +360,15 @@ func from_dict(d: Dictionary) -> void:
 	health = d.get("health", health)
 	sprint_multiplier = d.get("sprint_multiplier", sprint_multiplier)
 	melee_damage = d.get("melee_damage", melee_damage)
+	sight_weakpoint_mult = d.get("sight_weakpoint_mult", sight_weakpoint_mult)
 	magic_unlocked = d.get("magic_unlocked", magic_unlocked)
 	magic_damage_mult = d.get("magic_damage_mult", magic_damage_mult)
 	damage_reduction = d.get("damage_reduction", damage_reduction)
 	forest_essence = d.get("forest_essence", forest_essence)
 	collected_ids = d.get("collected_ids", collected_ids)
+	# Derive the fragment count from the recovered shard ids so the two can never
+	# disagree (collected_ids is the single source of truth).
+	fragments = mini(collected_ids.size(), FRAGMENT_TOTAL)
 	sight_unlocked = d.get("sight_unlocked", sight_unlocked)
 	lucidity = d.get("lucidity", lucidity)
 	desync = d.get("desync", desync)

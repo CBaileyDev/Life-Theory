@@ -8,6 +8,7 @@ var _root: Control
 var _menu: Control
 var _settings: SettingsPanel
 var _is_open := false
+var _resume_btn: Button
 
 func _ready() -> void:
 	add_to_group("pause")
@@ -35,7 +36,8 @@ func _build() -> void:
 	panel.add_child(v)
 	v.add_child(UITheme.make_title("Paused", 38))
 	v.add_child(_spacer(10))
-	v.add_child(_button("Resume", resume))
+	_resume_btn = _button("Resume", resume)
+	v.add_child(_resume_btn)
 	v.add_child(_button("Settings", _open_settings))
 	v.add_child(_button("Return to Main Menu", _to_main_menu))
 	v.add_child(_button("Quit", _quit))
@@ -57,12 +59,24 @@ func open() -> void:
 	_menu.show()
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_duck_audio(true)
+	if _resume_btn:
+		_resume_btn.grab_focus.call_deferred()
 
 func resume() -> void:
 	_is_open = false
 	get_tree().paused = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_duck_audio(false)
 	hide_menu()
+
+## Quiet the world while paused (set bus volumes directly — tweens don't advance
+## while the tree is paused, so this is instant). UI bus stays up for clicks.
+func _duck_audio(on: bool) -> void:
+	for b in ["Music", "Ambience", "SFX"]:
+		var idx := AudioServer.get_bus_index(b)
+		if idx >= 0:
+			AudioServer.set_bus_volume_db(idx, -18.0 if on else 0.0)
 
 func hide_menu() -> void:
 	visible = false
@@ -84,6 +98,7 @@ func _close_settings() -> void:
 # -------------------------------------------------------------------- nav
 func _to_main_menu() -> void:
 	get_tree().paused = false
+	_duck_audio(false)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
 

@@ -33,6 +33,25 @@ func _build() -> void:
 	# Live 3D forest backdrop (drawn over the gradient fallback).
 	add_child(MenuBackdrop.new())
 
+	# Readability scrim over the bright backdrop: darker top & bottom, clear in
+	# the middle, so the title and buttons read while the forest still shows.
+	var sg := Gradient.new()
+	sg.offsets = PackedFloat32Array([0.0, 0.32, 0.7, 1.0])
+	sg.colors = PackedColorArray([
+		Color(0.02, 0.04, 0.05, 0.62), Color(0.02, 0.04, 0.05, 0.18),
+		Color(0.02, 0.04, 0.05, 0.22), Color(0.02, 0.04, 0.05, 0.6)])
+	var stex := GradientTexture2D.new()
+	stex.gradient = sg
+	stex.fill_from = Vector2(0, 0)
+	stex.fill_to = Vector2(0, 1)
+	var scrim := TextureRect.new()
+	scrim.texture = stex
+	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scrim.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	scrim.stretch_mode = TextureRect.STRETCH_SCALE
+	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(scrim)
+
 	# Drifting fireflies for atmosphere.
 	var fireflies := CPUParticles2D.new()
 	fireflies.amount = 60
@@ -65,11 +84,14 @@ func _build() -> void:
 	v.add_child(sub)
 	v.add_child(_spacer(28))
 
-	v.add_child(_center_button(UITheme.make_button("Start Game", 300), _start_game))
+	var start_btn := UITheme.make_button("Start Game", 300)
+	v.add_child(_center_button(start_btn, _start_game))
 	if SaveManager.has_save():
 		v.add_child(_center_button(UITheme.make_button("Continue", 300), _continue_game))
 	v.add_child(_center_button(UITheme.make_button("Settings", 300), _open_settings))
 	v.add_child(_center_button(UITheme.make_button("Quit", 300), func(): get_tree().quit()))
+	# Keyboard/gamepad navigation starts on Start Game.
+	start_btn.grab_focus.call_deferred()
 
 	v.add_child(_spacer(20))
 	var hint := UITheme.make_label(

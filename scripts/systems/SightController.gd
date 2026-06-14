@@ -13,7 +13,10 @@ const LUCID_REGEN := 8.0
 const DESYNC_DECAY := 14.0
 
 var _mat: ShaderMaterial
+var _rect: ColorRect
 var _amount := 0.0
+var _first_sight := false   # fire Auralis's first-Sight line once
+var _warned_fray := false   # fire the Desync-fray warning once, then just toast
 
 func _ready() -> void:
 	_build_overlay()
@@ -23,16 +26,20 @@ func _build_overlay() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 0  # over the 3D world, under the HUD (layer 1)
 	add_child(layer)
-	var rect := ColorRect.new()
-	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rect = ColorRect.new()
+	_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Hidden until the Sight actually animates. The sight shader samples the
+	# screen texture, which forces a full back-buffer copy + fullscreen pass every
+	# frame it is visible — so keep it invisible (skipped entirely) while idle.
+	_rect.visible = false
 	var sh := load("res://shaders/sight.gdshader")
 	if sh:
 		_mat = ShaderMaterial.new()
 		_mat.shader = sh
 		_mat.set_shader_parameter("amount", 0.0)
-		rect.material = _mat
-	layer.add_child(rect)
+		_rect.material = _mat
+	layer.add_child(_rect)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("sight"):
@@ -46,6 +53,9 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_toggled(active: bool) -> void:
 	for n in get_tree().get_nodes_in_group("sight_only"):
 		n.visible = active
+	if active and not _first_sight:
+		_first_sight = true
+		GameState.request_dialogue("Auralis", Content.SIGHT_FIRST)
 
 func _process(delta: float) -> void:
 	if GameState.sight_active:
@@ -54,12 +64,19 @@ func _process(delta: float) -> void:
 		if GameState.lucidity <= 0.0 or GameState.desync >= GameState.MAX_DESYNC:
 			GameState.add_desync(GameState.MAX_DESYNC)
 			GameState.set_sight(false)
-			GameState.toast.emit("The world frays. The Sight collapses.")
+			if not _warned_fray:
+				_warned_fray = true
+				GameState.request_dialogue("Auralis", Content.DESYNC_WARNING)
+			else:
+				GameState.toast.emit("The world frays. The Sight collapses.")
 	else:
 		GameState.add_lucidity(LUCID_REGEN * delta)
 		GameState.add_desync(-DESYNC_DECAY * delta)
 	var target := 1.0 if GameState.sight_active else 0.0
 	_amount = move_toward(_amount, target, delta * 4.0)
-	if _mat:
+	# Only render (and pay the screen-copy cost) while the effect is on screen.
+	if _rect:
+		_rect.visible = _amount > 0.001
+	if _mat and _amount > 0.001:
 		_mat.set_shader_parameter("amount", _amount)
 		_mat.set_shader_parameter("desync", GameState.desync / GameState.MAX_DESYNC)

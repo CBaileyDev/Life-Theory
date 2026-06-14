@@ -54,12 +54,17 @@ func open(speaker: String, lines: Array) -> void:
 	_panel.visible = true
 	_show_line(str(_lines[0]))
 	AudioManager.play("magic_hum", -10.0)
+	AudioManager.dialogue_duck(true)   # drop music/ambience under the voice
 
 func _show_line(text: String) -> void:
 	# Typewriter reveal via Label.visible_ratio.
 	_text_label.text = text
 	if _type_tween and _type_tween.is_valid():
 		_type_tween.kill()
+	# Reduce-motion shows the full line at once instead of a typewriter sweep.
+	if SettingsManager.reduce_motion:
+		_text_label.visible_ratio = 1.0
+		return
 	_text_label.visible_ratio = 0.0
 	var dur := clampf(text.length() * 0.022, 0.2, 2.0)
 	_type_tween = create_tween()
@@ -79,6 +84,7 @@ func _advance() -> void:
 func _close() -> void:
 	_open = false
 	_panel.visible = false
+	AudioManager.dialogue_duck(false)   # restore music/ambience
 
 func _input(event: InputEvent) -> void:
 	if not _open:

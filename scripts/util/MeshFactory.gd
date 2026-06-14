@@ -9,17 +9,11 @@ extends RefCounted
 
 # ---------------------------------------------------------------- materials
 static var _foliage_shader: Shader = null
-static var _ground_shader: Shader = null
 
 static func _foliage() -> Shader:
 	if _foliage_shader == null:
 		_foliage_shader = load("res://shaders/foliage_wind.gdshader")
 	return _foliage_shader
-
-static func _ground() -> Shader:
-	if _ground_shader == null:
-		_ground_shader = load("res://shaders/ground.gdshader")
-	return _ground_shader
 
 ## Wind-swaying foliage material. Falls back to a plain material if the shader
 ## is unavailable, so the world always renders.
@@ -54,14 +48,107 @@ static func mat_pbr(prefix: String, scale := 1.0, fallback := Color(0.5, 0.5, 0.
 	m.uv1_scale = Vector3(scale, scale, scale)
 	return m
 
-static func mat_ground(moss: Color, dirt: Color) -> Material:
-	var sh := _ground()
-	if sh == null:
-		return mat_standard(moss, 1.0)
+## Multi-layer splat terrain material (grass / forest-floor / cliff blended by
+## slope + macro noise + a worn path mask). Uses the CC0 sets in
+## assets/textures/<layer>_albedo|normal|rough.jpg. Falls back to a flat ground
+## material if the grass set is missing, so the project always runs.
+static func mat_terrain(tint := Color(1, 1, 1), path_half := 2.6,
+		path_zmin := 0.0, path_zmax := 18.5) -> Material:
+	var sh := load("res://shaders/terrain.gdshader") as Shader
+	if sh == null or not ResourceLoader.exists("res://assets/textures/grass_albedo.jpg"):
+		return mat_pbr("ground", 0.12, Color(0.13, 0.19, 0.10))
 	var m := ShaderMaterial.new()
 	m.shader = sh
-	m.set_shader_parameter("moss", Vector3(moss.r, moss.g, moss.b))
-	m.set_shader_parameter("dirt", Vector3(dirt.r, dirt.g, dirt.b))
+	for layer in ["grass", "floor", "cliff"]:
+		m.set_shader_parameter(layer + "_albedo", load("res://assets/textures/%s_albedo.jpg" % layer))
+		m.set_shader_parameter(layer + "_normal", load("res://assets/textures/%s_normal.jpg" % layer))
+		m.set_shader_parameter(layer + "_rough", load("res://assets/textures/%s_rough.jpg" % layer))
+	m.set_shader_parameter("tint", Vector3(tint.r, tint.g, tint.b))
+	m.set_shader_parameter("path_half_width", path_half)
+	m.set_shader_parameter("path_z_min", path_zmin)
+	m.set_shader_parameter("path_z_max", path_zmax)
+	return m
+
+## Wind-swayed alpha-tested grass material for the MultiMesh carpet. Reuses the
+## grass GLB's own albedo+alpha texture (read off its surface material), so it
+## stays correct even if the texture filename changes. Returns null on failure,
+## in which case the carpet falls back to the GLB's native (static) material.
+static func mat_grass_card(scene: PackedScene, biome := 0) -> Material:
+	var sh := load("res://shaders/grass_card.gdshader") as Shader
+	if sh == null:
+		return null
+	var inst := scene.instantiate()
+	var mi := _first_mesh(inst)
+	var tex: Texture2D = null
+	if mi:
+		var m = mi.get_active_material(0)
+		if m is StandardMaterial3D:
+			tex = (m as StandardMaterial3D).albedo_texture
+	inst.free()
+	if tex == null:
+		return null
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	mat.set_shader_parameter("albedo_tex", tex)
+	mat.set_shader_parameter("tint", Vector3(1.0, 1.0, 0.92) if biome == 0 else Vector3(0.82, 0.86, 1.10))
+	return mat
+
+## A lightweight grass tuft: three crossed quads (~18 verts) UV-mapped to the
+## grass-clump billboards in the bottom row of grass_medium_01's atlas. Used for
+## the dense MultiMesh carpet — a 7k-vert photoscan mesh ×thousands tanks the
+## vertex count; this gives the same lush read for ~400x fewer verts.
+static func make_grass_card_mesh(width := 0.6, height := 0.45) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Two of the cleaner full-tuft regions from the atlas bottom row.
+	var tufts := [Rect2(0.20, 0.785, 0.19, 0.135), Rect2(0.585, 0.785, 0.20, 0.135)]
+	var angles := [0.0, PI / 3.0, 2.0 * PI / 3.0]
+	for i in angles.size():
+		var a: float = angles[i]
+		var uv: Rect2 = tufts[i % tufts.size()]
+		var dir := Vector3(cos(a), 0.0, sin(a)) * (width * 0.5)
+		var up := Vector3(0.0, height, 0.0)
+		var bl := -dir
+		var br := dir
+		var tl := -dir + up
+		var tr := dir + up
+		var n := Vector3(0.0, 1.0, 0.0)   # up normal → even, sky-lit grass
+		var uvbl := Vector2(uv.position.x, uv.position.y + uv.size.y)
+		var uvbr := Vector2(uv.position.x + uv.size.x, uv.position.y + uv.size.y)
+		var uvtl := Vector2(uv.position.x, uv.position.y)
+		var uvtr := Vector2(uv.position.x + uv.size.x, uv.position.y)
+		st.set_normal(n); st.set_uv(uvbl); st.add_vertex(bl)
+		st.set_normal(n); st.set_uv(uvbr); st.add_vertex(br)
+		st.set_normal(n); st.set_uv(uvtr); st.add_vertex(tr)
+		st.set_normal(n); st.set_uv(uvbl); st.add_vertex(bl)
+		st.set_normal(n); st.set_uv(uvtr); st.add_vertex(tr)
+		st.set_normal(n); st.set_uv(uvtl); st.add_vertex(tl)
+	return st.commit()
+
+static func _first_mesh(n: Node) -> MeshInstance3D:
+	if n is MeshInstance3D:
+		return n
+	for c in n.get_children():
+		var r := _first_mesh(c)
+		if r:
+			return r
+	return null
+
+## Reflective pond water (ripple + fresnel shader, with a flat translucent
+## fallback). Loomstrata water runs colder/darker.
+static func mat_water(biome := 0) -> Material:
+	var sh := load("res://shaders/water.gdshader") as Shader
+	if sh == null:
+		var fm := StandardMaterial3D.new()
+		fm.albedo_color = Color(0.08, 0.22, 0.26, 0.78)
+		fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		fm.roughness = 0.06
+		return fm
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	if biome == 1:
+		m.set_shader_parameter("shallow_color", Vector3(0.12, 0.20, 0.34))
+		m.set_shader_parameter("deep_color", Vector3(0.02, 0.05, 0.12))
 	return m
 
 static func mat_standard(color: Color, rough := 0.9, metal := 0.0) -> StandardMaterial3D:
@@ -90,6 +177,36 @@ static func make_aura(color: Color, amount := 24, rise := 0.5, radius := 0.9, si
 	p.draw_pass_1 = qm
 	p.amount = amount
 	p.lifetime = 2.2
+	return p
+
+## A one-shot impact spark burst (combat hits, projectile impacts). Self-frees
+## when the burst finishes. Add it to the scene and set its global_position.
+static func spark(color: Color, amount := 20, speed := 4.5, size := 0.16) -> GPUParticles3D:
+	var p := GPUParticles3D.new()
+	var mat := ParticleProcessMaterial.new()
+	mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	mat.emission_sphere_radius = 0.12
+	mat.direction = Vector3.UP
+	mat.spread = 120.0
+	mat.initial_velocity_min = speed * 0.4
+	mat.initial_velocity_max = speed
+	mat.gravity = Vector3(0, -7.0, 0)
+	mat.scale_min = 0.5
+	mat.scale_max = 1.0
+	mat.damping_min = 2.0
+	mat.damping_max = 5.0
+	mat.color = color
+	p.process_material = mat
+	var qm := QuadMesh.new()
+	qm.size = Vector2(size, size)
+	qm.material = mat_emissive(color, 4.5, true)
+	p.draw_pass_1 = qm
+	p.amount = amount
+	p.lifetime = 0.5
+	p.one_shot = true
+	p.explosiveness = 1.0
+	p.emitting = true
+	p.finished.connect(p.queue_free)
 	return p
 
 static func mat_emissive(color: Color, energy := 2.0, transparent := false) -> StandardMaterial3D:

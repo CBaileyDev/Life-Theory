@@ -21,6 +21,14 @@ var _hnoise: FastNoiseLite
 
 # Key locations (shared with the Forest controller for entity placement).
 const SPAWN := Vector3(0, 2.0, 18.0)
+const SPAWN_CLEAR := 6.0   # keep trees/rocks this far from the spawn at all densities
+
+# A still reflective pond carved into the terrain, left of the entrance path so
+# it frames a quiet vista on the way in. The bowl is dug locally in height_at.
+const POND := Vector3(-11.5, 0.0, 9.0)
+const POND_R := 6.5
+const POND_DEPTH := 2.0
+const WATER_LEVEL := -0.55
 const SHRINE_POS := Vector3(0, 0, -2.0)
 const AURALIS_POS := Vector3(6.0, 0, 3.0)
 const WISP_HOME := Vector3(-8.0, 0, -7.0)
@@ -33,7 +41,16 @@ const FRAGMENT_POS := [
 
 var rng := RandomNumberGenerator.new()
 var density := 1.0
+var cull_mult := 1.0   # per-quality LOD distance multiplier (Low pulls foliage in)
 var biome := 0   # GameState.Biome: 0 Quietwood, 1 Loomstrata
+
+# Base distances (metres) at which each scatter category fades out (scaled by
+# cull_mult). Distant alpha-tested grass/fern overdraw is the second-biggest
+# foliage cost after draw-call count, so culling it cheaply recovers fill rate.
+const CULL_TREE := 70.0
+const CULL_SMALLTREE := 48.0
+const CULL_ROCK := 48.0
+const CULL_GROUND := 26.0
 
 # Outputs collected during build.
 var trail_markers: Array[Node3D] = []
@@ -51,14 +68,29 @@ var _grass_variants: Array = []
 const TREE_GLBS := ["pine_tree_01", "fir_tree_01", "tree_small_02"]
 const SMALLTREE_GLBS := ["fir_sapling_medium"]
 const ROCK_GLBS := ["rock_moss_set_01", "rock_07"]
-const GROUND_GLBS := ["fern_02", "grass_medium_01", "shrub_01", "tree_stump_01"]
+# A dense, wind-swayed grass carpet (own MultiMesh) is the floor's main life.
+const GRASS_GLB := "grass_medium_01"
+# Ground-cover scatter as a data table: [slug, count, scale_min, scale_max,
+# y_offset]. Each type becomes one MultiMeshInstance3D (one draw batch for the
+# whole world). Tuned per-asset because the source meshes vary wildly in size.
+const GROUND_COVER := [
+	["fern_02", 260, 0.55, 1.2, -0.05],
+	["shrub_01", 70, 0.7, 1.3, -0.05],
+	["nettle_plant", 70, 0.3, 0.6, -0.02],
+	["dry_branches", 130, 0.6, 1.2, 0.0],
+	["tree_stump_01", 22, 0.6, 1.1, -0.06],
+	["mushroom_01", 16, 0.7, 1.5, -0.02],   # rare glowing accents, not litter
+]
 var _tree_scenes: Array = []
 var _smalltree_scenes: Array = []
 var _rock_scenes: Array = []
-var _ground_scenes: Array = []
+var _grass_scene: PackedScene = null
+# Cache of extracted {mesh, xform} per PackedScene for MultiMesh building.
+var _mm_cache := {}
 
-func _init(quality_density := 1.0, biome_id := 0) -> void:
+func _init(quality_density := 1.0, biome_id := 0, lod_mult := 1.0) -> void:
 	density = quality_density
+	cull_mult = lod_mult
 	biome = biome_id
 	rng.seed = WORLD_SEED + biome * 101  # a distinct layout per biome
 	_hnoise = FastNoiseLite.new()
@@ -69,7 +101,9 @@ func _init(quality_density := 1.0, biome_id := 0) -> void:
 	# Scanned-PBR (CC0) materials with procedural fallback colours.
 	_bark = MeshFactory.mat_pbr("bark", 0.5, Color(0.27, 0.20, 0.15))
 	_rock = MeshFactory.mat_pbr("rock", 0.4, Color(0.30, 0.33, 0.36))
-	_ground_mat = MeshFactory.mat_pbr("ground", 0.12, Color(0.13, 0.19, 0.10))
+	# Splat terrain: Quietwood runs warm-green, the Loomstrata cooler/violet.
+	var ground_tint := Color(1.06, 1.04, 0.92) if biome == 0 else Color(0.82, 0.86, 1.10)
+	_ground_mat = MeshFactory.mat_terrain(ground_tint, PATH_HALF_WIDTH, -0.5, 18.5)
 	# Several variants give natural colour variation; the Loomstrata runs cooler
 	# and more violet (a deeper, stranger layer).
 	var leaf_colors := [Color(0.12, 0.26, 0.15), Color(0.15, 0.30, 0.17),
@@ -86,7 +120,9 @@ func _init(quality_density := 1.0, biome_id := 0) -> void:
 	_tree_scenes = _load_scenes(TREE_GLBS)
 	_smalltree_scenes = _load_scenes(SMALLTREE_GLBS)
 	_rock_scenes = _load_scenes(ROCK_GLBS)
-	_ground_scenes = _load_scenes(GROUND_GLBS)
+	var grass_path := "res://assets/models/%s.glb" % GRASS_GLB
+	if ResourceLoader.exists(grass_path):
+		_grass_scene = load(grass_path)
 
 func _load_scenes(slugs: Array) -> Array:
 	var out: Array = []
@@ -99,34 +135,15 @@ func _load_scenes(slugs: Array) -> Array:
 func _pick(arr: Array):
 	return arr[rng.randi_range(0, arr.size() - 1)]
 
-## Instance a model scene, wrap it with a random yaw/scale and optional trunk
-## collision so the player can't walk through it.
-func _spawn_model(scene: PackedScene, pos: Vector3, smin: float, smax: float,
-		col_radius := 0.0, col_height := 0.0) -> Node3D:
-	var root := Node3D.new()
-	root.add_child(scene.instantiate())
-	root.position = pos
-	root.rotation.y = rng.randf_range(0.0, TAU)
-	var s := rng.randf_range(smin, smax)
-	root.scale = Vector3(s, s, s)
-	if col_radius > 0.0:
-		var body := StaticBody3D.new()
-		var col := CollisionShape3D.new()
-		var shape := CylinderShape3D.new()
-		shape.radius = col_radius
-		shape.height = col_height
-		col.shape = shape
-		col.position.y = col_height * 0.5
-		body.add_child(col)
-		root.add_child(body)
-	return root
-
 func build(parent: Node3D) -> void:
 	_build_ground(parent)
-	_build_path(parent)
+	_build_water(parent)
 	_build_boundary(parent)
 	_scatter_trees(parent)
+	_scatter_understory(parent)
 	_scatter_rocks(parent)
+	_build_logs(parent)
+	_scatter_grass_carpet(parent)
 	_scatter_foliage(parent)
 	_build_trail(parent)
 	_build_runes(parent)
@@ -139,17 +156,29 @@ func build(parent: Node3D) -> void:
 func height_at(x: float, z: float) -> float:
 	var d := Vector2(x, z).length()
 	var radial := clampf((d - FLAT_RADIUS) / (BLEND_RADIUS - FLAT_RADIUS), 0.0, 1.0)
+	radial = smoothstep(0.0, 1.0, radial)   # ease the rise out of the flat zone
 	# Flatten the entrance path corridor as well.
 	if z > -1.0 and z < 19.0:
 		var pflat := clampf((absf(x) - (PATH_HALF_WIDTH + 1.0)) / 3.0, 0.0, 1.0)
 		radial = minf(radial, pflat)
-	return _hnoise.get_noise_2d(x, z) * HEIGHT_AMP * radial
+	# Two octaves of rolling ground: fine detail + broad swells. A gentle rim
+	# berm lifts toward the boundary so the clearing reads as a nestled bowl
+	# (natural occlusion + a framed treeline, per the world design).
+	var detail := _hnoise.get_noise_2d(x, z) * HEIGHT_AMP
+	var swell := _hnoise.get_noise_2d(x * 0.28 + 100.0, z * 0.28 + 100.0) * (HEIGHT_AMP * 1.5)
+	var rim := smoothstep(AREA * 0.55, AREA * 1.05, d) * 2.6
+	var h := (detail + swell + rim) * radial
+	# Carve the pond bowl locally so the water has a basin to sit in.
+	var pd := Vector2(x - POND.x, z - POND.z).length()
+	if pd < POND_R:
+		h -= (1.0 - smoothstep(0.0, POND_R, pd)) * POND_DEPTH
+	return h
 
 func _build_ground(parent: Node3D) -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var half := AREA + 4.0
-	var step := 1.6
+	var step := 1.0   # finer grid → smoother slope shading for the splat shader
 	var cols := int((half * 2.0) / step)
 	for ix in cols:
 		for iz in cols:
@@ -172,22 +201,37 @@ func _build_ground(parent: Node3D) -> void:
 	mi.material_override = _ground_mat
 	parent.add_child(mi)
 
+	# Collision: a HeightMapShape3D (solid heightfield), NOT a trimesh. A
+	# zero-thickness concave trimesh can't reliably depenetrate the player's
+	# capsule — it falls through the surface and wedges below it (is_on_floor
+	# never becomes true, so the player can't move). A heightfield gives the
+	# capsule a stable, walkable floor. Sampled on a 1-unit grid from height_at.
 	var body := StaticBody3D.new()
 	var col := CollisionShape3D.new()
-	col.shape = mesh.create_trimesh_shape()
+	var hm := HeightMapShape3D.new()
+	var n := int(half * 2.0) + 1            # samples per side (1-unit cells)
+	var c := half                            # grid is centred on the origin
+	hm.map_width = n
+	hm.map_depth = n
+	var data := PackedFloat32Array()
+	data.resize(n * n)
+	for j in n:
+		for i in n:
+			data[j * n + i] = height_at(float(i) - c, float(j) - c)
+	hm.map_data = data
+	col.shape = hm
 	body.add_child(col)
 	parent.add_child(body)
 
-# ---------------------------------------------------------------------- path
-func _build_path(parent: Node3D) -> void:
-	# A mossy strip from the spawn (z=18) to the clearing (z=0).
+# -------------------------------------------------------------------- water
+func _build_water(parent: Node3D) -> void:
 	var mi := MeshInstance3D.new()
-	mi.name = "Path"
+	mi.name = "Pond"
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(PATH_HALF_WIDTH * 2.0, 19.0)
+	pm.size = Vector2(POND_R * 2.3, POND_R * 2.3)
 	mi.mesh = pm
-	mi.material_override = MeshFactory.mat_standard(Color(0.24, 0.21, 0.15), 1.0)
-	mi.position = Vector3(0, 0.02, 9.0)
+	mi.position = Vector3(POND.x, WATER_LEVEL, POND.z)
+	mi.material_override = MeshFactory.mat_water(biome)
 	parent.add_child(mi)
 
 # ------------------------------------------------------------------ boundary
@@ -210,73 +254,313 @@ func _build_boundary(parent: Node3D) -> void:
 		parent.add_child(body)
 
 # ------------------------------------------------------------------- scatter
+# Every scatter category is now drawn as MultiMeshInstance3D(s) — one GPU batch
+# per source mesh instead of one Node3D + draw call per prop. This both collapses
+# draw-call overhead (the headline optimization) and lets density climb into the
+# thousands for a genuinely lush floor at a fraction of the old cost.
+
 func _scatter_trees(parent: Node3D) -> void:
-	var use_models: bool = _tree_scenes.size() > 0
-	# Photoscanned trees are heavier than primitives, so use fewer of them.
-	# The Loomstrata is sparser and stranger.
-	var biome_mult := 0.65 if biome == 1 else 1.0
-	var count := int((90 if use_models else 140) * density * biome_mult)
+	if _tree_scenes.is_empty():
+		_scatter_trees_primitive(parent)
+		return
+	var biome_mult := 0.7 if biome == 1 else 1.0
+	var count := int(100 * density * biome_mult)
+	_scatter_mm(parent, _tree_scenes, count, 0.85, 1.3, {
+		"avoid_clearing": true, "avoid_path": true, "cull": CULL_TREE,
+		"col_radius": 0.45, "col_height": 9.0,
+		"sapling_scenes": _smalltree_scenes, "sapling_chance": 0.22,
+		"sapling_col_radius": 0.3, "sapling_col_height": 4.0,
+	})
+
+## A dense, cheap understory of small trees/shrubs (tree_small_02 ~3k verts)
+## fills the gaps between the heavy hero firs so the forest reads full, not bare.
+func _scatter_understory(parent: Node3D) -> void:
+	var path := "res://assets/models/tree_small_02.glb"
+	if not ResourceLoader.exists(path):
+		return
+	var biome_mult := 0.7 if biome == 1 else 1.0
+	var count := int(80 * density * biome_mult)
+	_scatter_mm(parent, [load(path)], count, 0.6, 1.5, {
+		"avoid_clearing": true, "avoid_path": true, "cull": CULL_SMALLTREE,
+		"col_radius": 0.3, "col_height": 2.0,
+	})
+
+## A scatter of fallen mossy logs — forest-floor detail you can be blocked by.
+func _build_logs(parent: Node3D) -> void:
+	var count := int(11 * density)
+	var body := StaticBody3D.new()
+	body.name = "LogCollision"
+	var placed := 0
+	var attempts := 0
+	while placed < count and attempts < count * 8:
+		attempts += 1
+		var p := _random_point()
+		if _in_clearing(p) or _on_path(p):
+			continue
+		var gy := height_at(p.x, p.z)
+		if gy < WATER_LEVEL + 0.2:
+			continue
+		var length := rng.randf_range(2.6, 5.2)
+		var radius := rng.randf_range(0.22, 0.4)
+		# Lay the cylinder (default Y-axis) horizontal: rotate 90° about Z, then yaw.
+		var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)) * Basis(Vector3(0, 0, 1), PI * 0.5)
+		var xf := Transform3D(basis, Vector3(p.x, gy + radius * 0.55, p.z))
+		var mi := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = radius * 0.82
+		cm.bottom_radius = radius
+		cm.height = length
+		cm.radial_segments = 8
+		mi.mesh = cm
+		mi.material_override = _bark
+		mi.transform = xf
+		parent.add_child(mi)
+		var cs := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(radius * 1.7, length, radius * 1.7)
+		cs.shape = box
+		cs.transform = xf
+		body.add_child(cs)
+		placed += 1
+	parent.add_child(body)
+
+func _scatter_rocks(parent: Node3D) -> void:
+	if _rock_scenes.is_empty():
+		return
+	var count := int(48 * density)
+	# Boulders block the player with an accurate convex hull of their actual mesh
+	# (a fixed cylinder let the player walk through the wide photoscan rocks).
+	_scatter_mm(parent, _rock_scenes, count, 0.7, 2.0, {
+		"avoid_path": true, "cull": CULL_ROCK,
+		"convex_collision": true, "y_offset": -0.1,
+	})
+
+func _scatter_grass_carpet(parent: Node3D) -> void:
+	if _grass_scene == null:
+		return
+	# Thousands of lightweight grass cards in one MultiMesh, wind-swayed via a
+	# dedicated alpha-tested shader that reads each instance's world origin. The
+	# card mesh (~18 verts) keeps the carpet cheap where the 7k-vert photoscan
+	# clump would not (see make_grass_card_mesh).
+	var mat := MeshFactory.mat_grass_card(_grass_scene, biome)
+	if mat == null:
+		return
+	var count := int(8000 * density)
+	_scatter_mm(parent, [_grass_scene], count, 0.7, 1.7, {
+		"cull": CULL_GROUND * 1.4, "y_offset": -0.04,
+		"mesh": MeshFactory.make_grass_card_mesh(),
+		"material_override": mat,
+		"vary_color": true,
+		"cast_shadow": GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
+	})
+
+func _scatter_foliage(parent: Node3D) -> void:
+	if _grass_scene == null and _tree_scenes.is_empty():
+		_scatter_foliage_primitive(parent)
+		return
+	var biome_mult := 0.85 if biome == 1 else 1.0
+	for entry in GROUND_COVER:
+		var slug: String = entry[0]
+		var path := "res://assets/models/%s.glb" % slug
+		if not ResourceLoader.exists(path):
+			continue
+		var scene: PackedScene = load(path)
+		var count := int(entry[1] * density * biome_mult)
+		_scatter_mm(parent, [scene], count, entry[2], entry[3], {
+			"cull": CULL_GROUND, "y_offset": entry[4],
+			"cast_shadow": GeometryInstance3D.SHADOW_CASTING_SETTING_OFF,
+		})
+
+# ----------------------------------------------------- MultiMesh scatter engine
+## Scatter `count` copies of one or more source GLBs as MultiMeshInstance3D(s)
+## (one per distinct source mesh). Honours clearing/path avoidance, terrain
+## drop, optional cylinder collision, distance culling and a material override.
+func _scatter_mm(parent: Node3D, scenes: Array, count: int, smin: float, smax: float,
+		opts := {}) -> void:
+	if scenes.is_empty():
+		return
+	var avoid_clearing: bool = opts.get("avoid_clearing", false)
+	var avoid_path: bool = opts.get("avoid_path", false)
+	var y_off: float = opts.get("y_offset", -0.05)
+	var col_r: float = opts.get("col_radius", 0.0)
+	var col_h: float = opts.get("col_height", 0.0)
+	var saplings: Array = opts.get("sapling_scenes", [])
+	var sap_chance: float = opts.get("sapling_chance", 0.0)
+	var buckets := {}                # PackedScene -> Array[Transform3D]
+	var cols: Array = []             # [pos, radius, height] cylinders
 	var placed := 0
 	var attempts := 0
 	while placed < count and attempts < count * 6:
 		attempts += 1
 		var p := _random_point()
+		if avoid_clearing and _in_clearing(p):
+			continue
+		if avoid_path and _on_path(p):
+			continue
+		# Trees/rocks (which set avoid_path) also stay clear of the spawn so the
+		# player never wakes up wedged inside a boulder/trunk at high density.
+		if avoid_path and Vector2(p.x - SPAWN.x, p.z - SPAWN.z).length() < SPAWN_CLEAR:
+			continue
+		# Nothing grows underwater; edge plants just above the line read as reeds.
+		if height_at(p.x, p.z) < WATER_LEVEL + 0.1:
+			continue
+		p.y = height_at(p.x, p.z) + y_off
+		var scn: PackedScene = _pick(scenes)
+		var cr := col_r
+		var ch := col_h
+		if sap_chance > 0.0 and not saplings.is_empty() and rng.randf() < sap_chance:
+			scn = _pick(saplings)
+			cr = opts.get("sapling_col_radius", col_r)
+			ch = opts.get("sapling_col_height", col_h)
+		var yaw := rng.randf_range(0.0, TAU)
+		var s := rng.randf_range(smin, smax)
+		var xf := Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3(s, s, s)), p)
+		if not buckets.has(scn):
+			buckets[scn] = []
+		buckets[scn].append(xf)
+		if cr > 0.0:
+			cols.append([p, cr * s, ch * s])
+		placed += 1
+	for scn in buckets:
+		_build_mm(parent, scn, buckets[scn], opts)
+		if opts.get("convex_collision", false):
+			_build_convex_collision(parent, scn, buckets[scn])
+	if not cols.is_empty():
+		_build_collision(parent, cols)
+
+func _build_mm(parent: Node3D, scene: PackedScene, placements: Array, opts: Dictionary) -> void:
+	var local := Transform3D.IDENTITY
+	var mesh = opts.get("mesh", null)   # explicit mesh (e.g. cheap grass card) wins
+	if mesh == null:
+		var data := _extract(scene)
+		if data.is_empty():
+			return
+		mesh = data["mesh"]
+		local = data["xform"]
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	var vary: bool = opts.get("vary_color", false)
+	mm.use_colors = vary
+	mm.mesh = mesh
+	mm.instance_count = placements.size()
+	for i in placements.size():
+		mm.set_instance_transform(i, (placements[i] as Transform3D) * local)
+		if vary:
+			# Natural per-clump variation: greener-to-yellow, brighter-to-darker.
+			var v := rng.randf_range(0.68, 1.12)
+			mm.set_instance_color(i, Color(v * rng.randf_range(0.82, 1.0), v, v * rng.randf_range(0.74, 0.92)))
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.cast_shadow = opts.get("cast_shadow", GeometryInstance3D.SHADOW_CASTING_SETTING_ON)
+	var ov = opts.get("material_override", null)
+	if ov:
+		mmi.material_override = ov
+	var cull: float = opts.get("cull", 0.0)
+	if cull > 0.0:
+		var d := cull * cull_mult
+		mmi.visibility_range_end = d
+		mmi.visibility_range_end_margin = d * 0.15
+		mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	parent.add_child(mmi)
+
+## Lightweight shared collision body holding one cylinder per heavy prop.
+func _build_collision(parent: Node3D, cols: Array) -> void:
+	var body := StaticBody3D.new()
+	body.name = "ScatterCollision"
+	for entry in cols:
+		var p: Vector3 = entry[0]
+		var cs := CollisionShape3D.new()
+		var shape := CylinderShape3D.new()
+		shape.radius = entry[1]
+		shape.height = entry[2]
+		cs.shape = shape
+		cs.position = Vector3(p.x, p.y + entry[2] * 0.5, p.z)
+		body.add_child(cs)
+	parent.add_child(body)
+
+## Accurate per-instance collision from each prop's actual mesh (a simplified
+## convex hull, cached per source scene). Used for boulders so the player can't
+## walk through them. The hull is in mesh-local space, so each instance's shape
+## transform is placement * the GLB's local transform.
+var _convex_cache := {}
+
+func _build_convex_collision(parent: Node3D, scene: PackedScene, placements: Array) -> void:
+	if not _convex_cache.has(scene):
+		var d := _extract(scene)
+		_convex_cache[scene] = d["mesh"].create_convex_shape(true, true) if not d.is_empty() else null
+	var shape = _convex_cache[scene]
+	if shape == null:
+		return
+	var local: Transform3D = _extract(scene)["xform"]
+	var body := StaticBody3D.new()
+	body.name = "RockCollision"
+	for xf in placements:
+		var cs := CollisionShape3D.new()
+		cs.shape = shape
+		cs.transform = (xf as Transform3D) * local
+		body.add_child(cs)
+	parent.add_child(body)
+
+## Extract the first MeshInstance3D's mesh + its transform-relative-to-root from
+## a GLB, cached so each model is instanced/walked only once.
+func _extract(scene: PackedScene) -> Dictionary:
+	if _mm_cache.has(scene):
+		return _mm_cache[scene]
+	var inst := scene.instantiate()
+	var mi := _find_mesh(inst)
+	var data := {}
+	if mi and mi.mesh:
+		data = {"mesh": mi.mesh, "xform": _local_xform(mi, inst)}
+	inst.free()
+	_mm_cache[scene] = data
+	return data
+
+func _find_mesh(n: Node) -> MeshInstance3D:
+	if n is MeshInstance3D:
+		return n
+	for c in n.get_children():
+		var r := _find_mesh(c)
+		if r:
+			return r
+	return null
+
+func _local_xform(mi: Node3D, root: Node) -> Transform3D:
+	var xf := Transform3D.IDENTITY
+	var n: Node = mi
+	while n != null and n != root:
+		if n is Node3D:
+			xf = (n as Node3D).transform * xf
+		n = n.get_parent()
+	return xf
+
+# ----------------------------------------------------- primitive fallbacks
+# Used only when the GLB set is absent (keeps the prototype runnable bare).
+func _scatter_trees_primitive(parent: Node3D) -> void:
+	var count := int(140 * density)
+	for i in count:
+		var p := _random_point()
 		if _in_clearing(p) or _on_path(p):
 			continue
 		p.y = height_at(p.x, p.z)
-		var tree: Node3D
-		if use_models:
-			# Occasional sapling for understory variation.
-			if _smalltree_scenes.size() > 0 and rng.randf() < 0.25:
-				tree = _spawn_model(_pick(_smalltree_scenes), p, 0.8, 1.4, 0.3, 3.0)
-			else:
-				tree = _spawn_model(_pick(_tree_scenes), p, 0.85, 1.3, 0.45, 7.0)
-		else:
-			tree = MeshFactory.make_tree(rng, _bark, _pick(_leaf_variants))
-			tree.position = p
+		var tree := MeshFactory.make_tree(rng, _bark, _pick(_leaf_variants))
+		tree.position = p
 		parent.add_child(tree)
-		placed += 1
 
-func _scatter_rocks(parent: Node3D) -> void:
-	var count := int(35 * density)
-	for i in count:
+func _scatter_foliage_primitive(parent: Node3D) -> void:
+	for i in int(90 * density):
 		var p := _random_point()
 		if _on_path(p):
 			continue
 		p.y = height_at(p.x, p.z)
-		var rock: Node3D
-		if _rock_scenes.size() > 0:
-			rock = _spawn_model(_pick(_rock_scenes), p, 0.7, 1.8)
-		else:
-			rock = MeshFactory.make_rock(rng, _rock)
-			rock.position = p
-		parent.add_child(rock)
-
-func _scatter_foliage(parent: Node3D) -> void:
-	# Ground cover: photoscanned ferns/grass/shrubs/stumps if available.
-	if _ground_scenes.size() > 0:
-		var clumps := int(160 * density)
-		for i in clumps:
-			var p := _random_point()
-			p.y = height_at(p.x, p.z)
-			parent.add_child(_spawn_model(_pick(_ground_scenes), p, 0.7, 1.5))
-	else:
-		var bushes := int(90 * density)
-		for i in bushes:
-			var p := _random_point()
-			if _on_path(p):
-				continue
-			p.y = height_at(p.x, p.z)
-			var b := MeshFactory.make_bush(rng, _pick(_bush_variants))
-			b.position = p
-			parent.add_child(b)
-		var tufts := int(220 * density)
-		for i in tufts:
-			var p := _random_point()
-			p.y = height_at(p.x, p.z)
-			var g := MeshFactory.make_grass_tuft(rng, _pick(_grass_variants))
-			g.position = p
-			parent.add_child(g)
+		var b := MeshFactory.make_bush(rng, _pick(_bush_variants))
+		b.position = p
+		parent.add_child(b)
+	for i in int(220 * density):
+		var p := _random_point()
+		p.y = height_at(p.x, p.z)
+		var g := MeshFactory.make_grass_tuft(rng, _pick(_grass_variants))
+		g.position = p
+		parent.add_child(g)
 
 # ------------------------------------------------------- hidden magical layer
 func _build_trail(parent: Node3D) -> void:

@@ -12,6 +12,8 @@ var _health_fill: ColorRect
 var _health_label: Label
 var _toast_label: Label
 var _damage_vignette: ColorRect
+var _dim_overlay: ColorRect
+var _dim_tween: Tween
 var _toast_tween: Tween
 var _health_tween: Tween
 var _stamina_fill: ColorRect
@@ -23,6 +25,9 @@ var _crosshair: Control
 var _hitmarker: Label
 var _death_overlay: ColorRect
 var _death_label: Label
+var _fps_label: Label
+var _fps_accum := 0.0
+var _fps_last := -1
 
 func _ready() -> void:
 	add_to_group("hud")
@@ -34,7 +39,18 @@ func _ready() -> void:
 	GameState.lucidity_changed.connect(_on_lucidity_changed)
 	GameState.desync_changed.connect(_on_desync_changed)
 	GameState.reagents_changed.connect(_on_reagents_changed)
+	GameState.dim_applied.connect(_on_dim_applied)
+	SettingsManager.show_fps_changed.connect(_on_show_fps_changed)
 	GameState.broadcast()
+
+func _on_dim_applied(duration: float) -> void:
+	if not _dim_overlay or SettingsManager.reduce_motion:
+		return
+	if _dim_tween and _dim_tween.is_valid():
+		_dim_tween.kill()
+	_dim_overlay.color.a = 0.55
+	_dim_tween = create_tween()
+	_dim_tween.tween_property(_dim_overlay, "color:a", 0.0, maxf(duration, 0.3))
 
 func _build() -> void:
 	var root := Control.new()
@@ -66,6 +82,13 @@ func _build() -> void:
 	_damage_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_damage_vignette)
 
+	# Dim overlay — a Dimmer's strike clouds your vision (darkens, then clears).
+	_dim_overlay = ColorRect.new()
+	_dim_overlay.color = Color(0.03, 0.04, 0.10, 0.0)
+	_dim_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_dim_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_dim_overlay)
+
 	# Quest panel (top-left).
 	var quest_panel := UITheme.make_panel()
 	quest_panel.position = Vector2(20, 20)
@@ -95,7 +118,7 @@ func _build() -> void:
 	root.add_child(hp_panel)
 	var hbox := VBoxContainer.new()
 	hp_panel.add_child(hbox)
-	_health_label = UITheme.make_label("Vitality", 13, UITheme.TEXT_DIM)
+	_health_label = UITheme.make_label("Vitality", 13, UITheme.TEXT)
 	hbox.add_child(_health_label)
 	var bar_bg := ColorRect.new()
 	bar_bg.color = Color(0.1, 0.04, 0.05, 0.9)
@@ -156,8 +179,17 @@ func _build() -> void:
 	_death_label.modulate.a = 0.0
 	root.add_child(_death_label)
 
+	# FPS counter (bottom-right; toggle with F3 or in Settings). Off by default.
+	_fps_label = UITheme.make_label("", 14, UITheme.TEXT_DIM)
+	_fps_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_fps_label.position = Vector2(-104, -30)
+	_fps_label.custom_minimum_size = Vector2(84, 0)
+	_fps_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_fps_label.visible = SettingsManager.show_fps
+	root.add_child(_fps_label)
+
 func _make_sub_bar(parent: VBoxContainer, label: String, color: Color) -> ColorRect:
-	parent.add_child(UITheme.make_label(label, 13, UITheme.TEXT_DIM))
+	parent.add_child(UITheme.make_label(label, 13, UITheme.TEXT))
 	var bg := ColorRect.new()
 	bg.color = Color(0.05, 0.07, 0.09, 0.9)
 	bg.custom_minimum_size = Vector2(220, 12)
@@ -168,6 +200,38 @@ func _make_sub_bar(parent: VBoxContainer, label: String, color: Color) -> ColorR
 	fill.size = Vector2(220, 12)
 	bg.add_child(fill)
 	return fill
+
+# ---------------------------------------------------------------- fps counter
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("toggle_fps"):
+		SettingsManager.toggle_show_fps()
+		get_viewport().set_input_as_handled()
+
+func _on_show_fps_changed(on: bool) -> void:
+	if _fps_label:
+		_fps_label.visible = on
+		_fps_last = -1  # force a refresh next frame
+
+func _process(delta: float) -> void:
+	if not _fps_label or not _fps_label.visible:
+		return
+	# Throttle to ~5 Hz; only touch the label (a string alloc) when it changes.
+	_fps_accum += delta
+	if _fps_accum < 0.2:
+		return
+	_fps_accum = 0.0
+	var fps := int(round(Engine.get_frames_per_second()))
+	if fps == _fps_last:
+		return
+	_fps_last = fps
+	_fps_label.text = "%d FPS" % fps
+	# Green = comfortably above target, gold = around the 30 fps floor, red = below.
+	var col := Color(0.55, 0.85, 0.55)
+	if fps < 30:
+		col = Color(0.9, 0.4, 0.4)
+	elif fps < 50:
+		col = UITheme.GOLD
+	_fps_label.add_theme_color_override("font_color", col)
 
 # ------------------------------------------------------------------ external
 func set_prompt(text: String) -> void:

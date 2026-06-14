@@ -38,7 +38,6 @@ func _ready() -> void:
 	col.shape = shape
 	add_child(col)
 	body_entered.connect(_on_hit)
-	area_entered.connect(_on_hit)
 
 func _physics_process(delta: float) -> void:
 	global_position += _dir * SPEED * delta
@@ -54,6 +53,14 @@ func _on_hit(other) -> void:
 		var huds := get_tree().get_nodes_in_group("hud")
 		if huds.size() > 0 and huds[0].has_method("hitmarker"):
 			huds[0].hitmarker()
+		_impact()
 		queue_free()
-	elif other is StaticBody3D:
+	elif other is PhysicsBody3D:
+		# Any solid body (trees, rocks, walls, wildlife, future NPCs) stops the orb.
+		_impact()
 		queue_free()
+
+func _impact() -> void:
+	var s := MeshFactory.spark(Color(0.5, 0.9, 1.0), 18, 4.5, 0.15)
+	get_tree().current_scene.add_child(s)
+	s.global_position = global_position

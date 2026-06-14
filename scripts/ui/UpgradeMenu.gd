@@ -1,19 +1,10 @@
 extends CanvasLayer
 ## UpgradeMenu
 ## Shown after the player returns to the shrine with all fragments. Offers the
-## four upgrades from the brief; choosing one applies it immediately
-## (via GameState), shows confirmation, then returns to play.
-
-const UPGRADES := [
-	{"id": "heart_of_bark", "name": "Heart of Bark",
-		"desc": "Roots run deep. Increase your maximum vitality (+60)."},
-	{"id": "fleet_hidden_path", "name": "Fleet of the Hidden Path",
-		"desc": "The trail carries you. Sprint noticeably faster."},
-	{"id": "rootblade_strength", "name": "Rootblade Strength",
-		"desc": "The Ancient Rootblade strikes harder (+40 melee damage)."},
-	{"id": "simulation_pulse", "name": "Simulation Pulse",
-		"desc": "Glimpse the code beneath. Unlock a magic pulse — Right-Click to cast."},
-]
+## four keystone upgrades (the roots of the Seeker Paths); choosing one applies
+## it immediately (via GameState), shows confirmation, then returns to play.
+## The keystones are read from SkillTree (the single source of truth) so their
+## names/descriptions never drift from the Sanctum grid.
 
 var _panel_v: VBoxContainer
 
@@ -50,7 +41,7 @@ func _build_choices() -> void:
 	_panel_v.add_child(UITheme.make_label("\"%s\"" % Content.UPGRADE_INTRO, 16, UITheme.TEXT_DIM))
 	_panel_v.add_child(_spacer(8))
 
-	for up in UPGRADES:
+	for up in SkillTree.roots():
 		_panel_v.add_child(_make_card(up))
 
 # ----------------------------------------------------------------- shop mode
@@ -163,7 +154,7 @@ func _make_card(up: Dictionary, note := "", on_press := Callable()) -> Control:
 	var title: String = up["name"] if note == "" else "%s    —    %s" % [up["name"], note]
 	var name_l := UITheme.make_label(title, 20, UITheme.GOLD)
 	name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var desc_l := UITheme.make_label(up["desc"], 15, UITheme.TEXT)
+	var desc_l := UITheme.make_label(up.get("flavor", up["desc"]), 15, UITheme.TEXT)
 	desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	desc_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_l.custom_minimum_size = Vector2(560, 0)
@@ -193,7 +184,7 @@ func _show_confirmation(up: Dictionary) -> void:
 	v.add_theme_constant_override("separation", 14)
 	panel.add_child(v)
 	v.add_child(UITheme.make_title("Path Chosen", 32))
-	var l := UITheme.make_label("You have become a seeker of \"%s\".\n%s" % [up["name"], up["desc"]],
+	var l := UITheme.make_label("You have become a seeker of \"%s\".\n%s" % [up["name"], up.get("flavor", up["desc"])],
 		17, UITheme.TEXT)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.custom_minimum_size = Vector2(470, 0)

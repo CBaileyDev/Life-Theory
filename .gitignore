@@ -19,3 +19,6 @@ Thumbs.db
 # Editor
 *.tmp
 *~
+
+# Dev screenshot artifacts (large, not source)
+tools/shots/

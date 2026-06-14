@@ -121,8 +121,17 @@ static func sfx(name: String) -> AudioStreamWAV:
 			var base := _chord(1.6, [196.0, 294.0, 392.0, 587.0], 0.3)
 			var shimmer := tone(1.6, 880.0, 1760.0, [1.0, 0.5], false, 0.08, 0.2, 1.0, 0.18)
 			return _wav(_mix(base, shimmer))
-		"footstep":
+		"footstep", "step_dirt":
 			return _wav(tone(0.07, 120.0, 70.0, [1.0], false, 0.5, 0.002, 0.05, 0.28))
+		"dodge":
+			# A quick airy whoosh — descending noisy glide.
+			return _wav(tone(0.24, 560.0, 170.0, [1.0], false, 0.5, 0.004, 0.2, 0.3))
+		"step_grass":
+			# Soft high swish — brushing through undergrowth.
+			return _wav(tone(0.06, 240.0, 150.0, [1.0], false, 0.7, 0.002, 0.05, 0.2))
+		"step_rock":
+			# A harder, brighter tap on stone.
+			return _wav(tone(0.05, 300.0, 130.0, [1.0], true, 0.25, 0.001, 0.04, 0.24))
 		"bird":
 			# A short high warble.
 			return _wav(_seq([2200.0, 2900.0, 2500.0, 3100.0], 0.05, false, 0.3))
@@ -137,6 +146,8 @@ static func sfx(name: String) -> AudioStreamWAV:
 ## "calm" (major-ish, the natural forest) vs "layer" (darker minor, the First
 ## Layer). Procedural — a placeholder score; drop real music in audio/ to override.
 static func music(name: String) -> AudioStreamWAV:
+	if name == "combat":
+		return _combat_music()
 	var dur := 8.0
 	var minor := name == "layer"
 	var root := 110.0 if minor else 130.81
@@ -152,8 +163,34 @@ static func music(name: String) -> AudioStreamWAV:
 		mel.append_array(tone(1.0, f, -1.0, [1.0, 0.5, 0.25], false, 0.0, 0.02, 0.85, 0.10))
 	return _wav(_mix(pad, mel), true)
 
-## A gentle ~4s looping forest pad: low detuned drones + a slow airy noise bed.
-static func ambience() -> AudioStreamWAV:
+## A tenser ~8s loop for active fights: a driving low pulse on every beat, a dark
+## minor pad, and a faster, more urgent melody. Crossfaded in while wisps hunt.
+static func _combat_music() -> AudioStreamWAV:
+	var dur := 8.0
+	var root := 98.0
+	var pad := _mix(
+		tone(dur, root, -1.0, [1.0, 0.4, 0.2], false, 0.0, 1.0, 1.0, 0.13),
+		tone(dur, root * 1.189, -1.0, [1.0, 0.3], false, 0.0, 1.0, 1.0, 0.08))  # minor 3rd tension
+	# Driving pulse: a short low hit on every half-second beat.
+	var pulse := PackedFloat32Array()
+	var beats := int(dur / 0.5)
+	for i in beats:
+		pulse.append_array(tone(0.18, root * 0.5, root * 0.45, [1.0], false, 0.1, 0.004, 0.14, 0.22))
+		pulse.append_array(silence(0.32))
+	# Urgent melody, faster notes on a minor scale.
+	var scale := [0, 3, 5, 6, 7, 10]   # minor with a flat-5 for menace
+	var mel := PackedFloat32Array()
+	for i in 16:
+		var semi: int = scale[(i * 3) % scale.size()]
+		var f := root * 2.0 * pow(2.0, semi / 12.0)
+		mel.append_array(tone(0.5, f, -1.0, [1.0, 0.5, 0.3], false, 0.0, 0.01, 0.42, 0.085))
+	return _wav(_mix(_mix(pad, pulse), mel), true)
+
+## A looping ambient bed. "forest_day" is a warm low pad + airy wind; "loomstrata"
+## is deeper, slower and eerier (the layer beneath the forest).
+static func ambience(name := "forest_day") -> AudioStreamWAV:
+	if name == "loomstrata":
+		return _loom_ambience()
 	var dur := 4.0
 	var pad := _mix(
 		tone(dur, 98.0, -1.0, [1.0, 0.3], false, 0.0, 0.6, 0.6, 0.18),
@@ -167,3 +204,31 @@ static func ambience() -> AudioStreamWAV:
 		var m := 0.5 + 0.5 * sin(TAU * 0.25 * float(i) / RATE)
 		wind[i] = (randf() * 2.0 - 1.0) * 0.05 * m
 	return _wav(_mix(pad, wind), true)
+
+## A gentle ~3s looping water lap/trickle for positional pond ambience.
+static func water_loop() -> AudioStreamWAV:
+	var dur := 3.0
+	var n := int(dur * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var m := 0.45 + 0.35 * sin(TAU * 0.5 * t) + 0.2 * sin(TAU * 1.9 * t + 1.3)
+		out[i] = (randf() * 2.0 - 1.0) * 0.07 * clampf(m, 0.0, 1.0)
+	return _wav(out, true)
+
+## Deeper, stranger bed for the Loomstrata: a sub drone, a detuned tritone, a
+## slow breathing hiss, and a faint high shimmer that drifts in and out.
+static func _loom_ambience() -> AudioStreamWAV:
+	var dur := 6.0
+	var pad := _mix(
+		tone(dur, 73.42, -1.0, [1.0, 0.4, 0.15], false, 0.0, 1.2, 1.2, 0.18),
+		tone(dur, 103.8, -1.0, [1.0, 0.3], false, 0.0, 1.2, 1.2, 0.10))  # ~tritone unease
+	var n := pad.size()
+	var hiss := PackedFloat32Array()
+	hiss.resize(n)
+	for i in n:
+		var breath := 0.4 + 0.6 * sin(TAU * 0.12 * float(i) / RATE)   # slow breathing
+		var shimmer := 0.5 + 0.5 * sin(TAU * 880.0 * float(i) / RATE) * sin(TAU * 0.08 * float(i) / RATE)
+		hiss[i] = (randf() * 2.0 - 1.0) * 0.045 * breath + shimmer * 0.012
+	return _wav(_mix(pad, hiss), true)

@@ -59,6 +59,7 @@ There is **no build step** and **no external dependency** to fetch.
 | Journal / Inventory | **Tab** / **I** |
 | Pause | **Esc** |
 | Quick save / load | **F5** / **F9** |
+| Toggle FPS counter | **F3** (or Settings → *Show FPS*) |
 
 ---
 
@@ -134,13 +135,21 @@ toggle**. All settings persist to `user://settings.cfg` (cross-platform).
 
 ## Performance notes
 
-- **Base MacBook Pro M5:** target **Low/Medium**. Forward+ runs on Metal via
-  MoltenVK; glow and shadows are the main costs, both off at Low.
-- **Windows 11 gaming PC:** **Medium/High** comfortably.
-- The world is ~140 trees + foliage at full density, all simple primitives with
-  trunk-only collision, so geometry cost is modest. The biggest tunables are
-  shadows, MSAA, and the screen-distortion effect (only active for ~1.5s during
-  the transformation).
+- **First launch auto-detects the GPU** (`SettingsManager._auto_detect_quality`)
+  and picks a safe default: **Low + 70% render scale** on Apple Silicon /
+  integrated GPUs, **High** on a discrete desktop card, Medium otherwise. The
+  choice persists to `user://settings.cfg`; change it any time in Settings.
+- **Measured on a base MacBook Pro M5** (Metal, Forward+): the scene renders
+  comfortably at the 120 Hz display cap at **every** preset (GPU frame time well
+  under the budget), i.e. far above the 30 fps floor — there is ample headroom.
+- **Windows 11 gaming PC (e.g. 9950X3D / RTX 4080):** **High** with full density,
+  4× MSAA, volumetric fog, and extended draw distance.
+- Cost controls, cheapest-impactful first: the two fullscreen screen-read shaders
+  (Sight + transformation) are **skipped while idle**; scattered foliage uses
+  **distance culling** (`visibility_range`, pulled in further on Low); shadows
+  drop to 2-split @1536 (Medium) / off (Low); MSAA and **render scale** are
+  per-preset levers; textures are VRAM-compressed + mipmapped. Turn the **FPS
+  counter** on (F3) to watch the budget while tuning.
 
 ---
 
@@ -216,7 +225,7 @@ shaders/
   screen_transition.gdshader  # transformation distortion/flash (canvas_item)
   rune_glow.gdshader          # pulsing tree runes (spatial)
   foliage_wind.gdshader       # per-instance wind sway for trees/bushes/grass
-  ground.gdshader             # procedural moss/dirt fBm forest floor
+  sight.gdshader              # "the Sight" perceive-the-simulation overlay
 audio/                   # empty hooks + README (drop OGG/WAV here)
 assets/  materials/      # placeholders; prototype is fully procedural
 docs/                    # DESIGN, DECISIONS, BUILD
