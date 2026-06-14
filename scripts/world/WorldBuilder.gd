@@ -184,14 +184,16 @@ func height_at(x: float, z: float) -> float:
 	if pd < POND_R:
 		h -= (1.0 - smoothstep(0.0, POND_R, pd)) * POND_DEPTH
 	# Cairn Ridge: a gentle mound (walkable slope) rising to the west overlook.
-	var rd := Vector2(x - RIDGE.x, z - RIDGE.z).length()
-	if rd < RIDGE_R:
-		h += (1.0 - smoothstep(0.0, RIDGE_R, rd)) * RIDGE_H
+	# Biome 0 only — terracing the mound in the Loomstrata could make it unclimbable.
+	if biome == 0:
+		var rd := Vector2(x - RIDGE.x, z - RIDGE.z).length()
+		if rd < RIDGE_R:
+			h += (1.0 - smoothstep(0.0, RIDGE_R, rd)) * RIDGE_H
 	# Loomstrata: the world stops pretending to be nature. Quantise the rolling
 	# ground into flat FAULT-TERRACES — resolution loss reads as faceting. The
 	# clearing/path stay flat (h≈0 → floors to 0), so traversal is unaffected.
 	if biome == 1:
-		h = floor(h / 0.55) * 0.55
+		h = floor(h / 0.45) * 0.45   # gentle terraces — jumpable steps, no traps
 	return h
 
 func _build_ground(parent: Node3D) -> void:

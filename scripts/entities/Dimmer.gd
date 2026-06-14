@@ -16,4 +16,6 @@ func _ready() -> void:
 func _strike_effect() -> void:
 	# Half the damage of a wisp, but it blinds — a priority threat.
 	GameState.damage_player(ATTACK_DAMAGE * 0.5 * SettingsManager.enemy_damage_mult(), global_position)
-	GameState.dim_applied.emit(3.2)
+	# Don't blind on a strike the player dodged (i-frames).
+	if not GameState.player_invuln:
+		GameState.dim_applied.emit(3.2)

@@ -373,3 +373,7 @@ func from_dict(d: Dictionary) -> void:
 	lucidity = d.get("lucidity", lucidity)
 	desync = d.get("desync", desync)
 	sight_reagents = d.get("sight_reagents", sight_reagents)
+	# Transient combat flags must never survive a load (else the Sight or dodge
+	# i-frames could restore stuck-on). They're re-driven by play, not saved.
+	sight_active = false
+	player_invuln = false

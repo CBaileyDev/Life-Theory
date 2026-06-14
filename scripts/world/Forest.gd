@@ -44,6 +44,7 @@ func _ready() -> void:
 	_build_ui()
 	_spawn_player()
 	_build_vista_trigger()
+	_build_pond_trigger()
 
 	GameState.world_state_changed.connect(_on_world_changed)
 	SettingsManager.graphics_changed.connect(_apply_graphics)
@@ -416,6 +417,26 @@ func _build_vista_trigger() -> void:
 		_vista_seen = true
 		GameState.request_dialogue("Auralis", Content.VISTA_REVEAL)
 		GameState.toast.emit("A seam in the world, far below."))
+
+var _pond_seen := false
+
+## Auralis muses the first time the player reaches the quiet pond (Quietwood).
+func _build_pond_trigger() -> void:
+	if GameState.current_biome != GameState.Biome.QUIETWOOD:
+		return
+	var area := Area3D.new()
+	var cs := CollisionShape3D.new()
+	var sph := SphereShape3D.new()
+	sph.radius = 6.0
+	cs.shape = sph
+	area.add_child(cs)
+	area.position = Vector3(WorldBuilder.POND.x, WorldBuilder.WATER_LEVEL + 1.0, WorldBuilder.POND.z)
+	add_child(area)
+	area.body_entered.connect(func(b: Node) -> void:
+		if _pond_seen or not b.is_in_group("player"):
+			return
+		_pond_seen = true
+		GameState.request_dialogue("Auralis", Content.POND_MUSING))
 
 func _spawn_player() -> void:
 	_player = PlayerScript.new()
