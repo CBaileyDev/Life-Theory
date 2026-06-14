@@ -88,7 +88,7 @@ const GROUND_COVER := [
 	["nettle_plant", 70, 0.3, 0.6, -0.02],
 	["dry_branches", 130, 0.6, 1.2, 0.0],
 	["tree_stump_01", 22, 0.6, 1.1, -0.06],
-	["ultraviolet_mushroom", 8, 0.8, 1.6, -0.02],   # Meshy AI glowing accents (heavy mesh -> low count)
+	["ultraviolet_mushroom", 16, 0.8, 1.7, -0.02],   # Meshy AI glowing accents (now 26k tris)
 ]
 var _tree_scenes: Array = []
 var _smalltree_scenes: Array = []
