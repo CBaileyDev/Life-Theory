@@ -11,6 +11,8 @@ extends CharacterBody3D
 
 enum State { IDLE, CHASE, ATTACK, DEAD }
 
+const ColossusScene := preload("res://assets/models/void_colossus.glb")
+
 const DETECT_RANGE := 14.0
 const ATTACK_RANGE := 2.2
 const MOVE_SPEED := 3.4
@@ -52,12 +54,20 @@ func _ready() -> void:
 func _build() -> void:
 	_core = MeshInstance3D.new()
 	var sm := SphereMesh.new()
-	sm.radius = 0.45
-	sm.height = 0.9
+	# Small inner glow seated in the Colossus's chest (the body is now the visual).
+	sm.radius = 0.18
+	sm.height = 0.36
 	_core.mesh = sm
 	_core_mat = MeshFactory.mat_emissive(core_color, 3.0)
 	_core.material_override = _core_mat
 	add_child(_core)
+
+	# Crystalline Void Colossus (Meshy AI) — the corrupted construct's body, a
+	# child of the core so it inherits the attack wind-up scale pulse. The GLB is
+	# pre-scaled to ~1.5m and centred, so it floats around the core.
+	var body := ColossusScene.instantiate()
+	body.name = "ColossusBody"
+	_core.add_child(body)
 
 	# Jagged shards orbiting the core.
 	for i in 4:
