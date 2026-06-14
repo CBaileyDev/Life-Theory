@@ -222,7 +222,7 @@ func _strike() -> void:
 ## What landing a hit does. Base wisp deals damage; subclasses override (the
 ## Dimmer blinds instead of dealing full damage).
 func _strike_effect() -> void:
-	GameState.damage_player(ATTACK_DAMAGE * SettingsManager.enemy_damage_mult())
+	GameState.damage_player(ATTACK_DAMAGE * SettingsManager.enemy_damage_mult(), global_position)
 
 func _clamp_hover(delta: float) -> void:
 	# Keep it floating near hover height with a gentle bob. Follow the terrain

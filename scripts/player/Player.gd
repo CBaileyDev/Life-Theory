@@ -209,7 +209,7 @@ func _apply_fov(fov: float) -> void:
 		tp_camera.fov = fov
 
 # --------------------------------------------------------------- camera shake
-func _on_damaged(amount: float) -> void:
+func _on_damaged(amount: float, _from_pos: Vector3) -> void:
 	if SettingsManager.reduce_motion:
 		return
 	_trauma = minf(_trauma + clampf(amount / 30.0, 0.2, 0.7) * SettingsManager.screen_shake, 1.0)

@@ -14,6 +14,8 @@ var _toast_label: Label
 var _damage_vignette: ColorRect
 var _dim_overlay: ColorRect
 var _dim_tween: Tween
+var _dmg_dir: Label
+var _dmg_dir_tween: Tween
 var _toast_tween: Tween
 var _health_tween: Tween
 var _stamina_fill: ColorRect
@@ -40,8 +42,28 @@ func _ready() -> void:
 	GameState.desync_changed.connect(_on_desync_changed)
 	GameState.reagents_changed.connect(_on_reagents_changed)
 	GameState.dim_applied.connect(_on_dim_applied)
+	GameState.player_damaged.connect(_on_player_damaged_dir)
 	SettingsManager.show_fps_changed.connect(_on_show_fps_changed)
 	GameState.broadcast()
+
+## Point a red wedge toward the attacker for ~0.9s (relative to where you face).
+func _on_player_damaged_dir(_amount: float, from_pos: Vector3) -> void:
+	if not _dmg_dir or from_pos == Vector3.INF:
+		return
+	var cam := get_viewport().get_camera_3d()
+	if not cam:
+		return
+	# Source in camera space: +x right, looking down -z. theta=0 → straight ahead.
+	var local := cam.global_transform.affine_inverse() * from_pos
+	var theta := atan2(local.x, -local.z)
+	_dmg_dir.rotation = theta
+	var c := get_viewport().get_visible_rect().size * 0.5
+	_dmg_dir.position = c + Vector2(sin(theta), -cos(theta)) * 165.0 - _dmg_dir.size * 0.5
+	_dmg_dir.modulate.a = 0.9
+	if _dmg_dir_tween and _dmg_dir_tween.is_valid():
+		_dmg_dir_tween.kill()
+	_dmg_dir_tween = create_tween()
+	_dmg_dir_tween.tween_property(_dmg_dir, "modulate:a", 0.0, 0.9)
 
 func _on_dim_applied(duration: float) -> void:
 	if not _dim_overlay or SettingsManager.reduce_motion:
@@ -139,6 +161,18 @@ func _build() -> void:
 	_desync_fill = _make_sub_bar(_sight_box, "Desync", Color(0.9, 0.3, 0.7))
 	_reagent_label = UITheme.make_label("Lucid Caps  0    [Q] Sight  [R] use", 12, UITheme.GOLD)
 	_sight_box.add_child(_reagent_label)
+
+	# Directional damage indicator — a red wedge that points toward the attacker
+	# (huge readability win with multiple enemies). Hidden until hit.
+	_dmg_dir = UITheme.make_label("▲", 40, Color(1.0, 0.3, 0.3))
+	_dmg_dir.set_anchors_preset(Control.PRESET_CENTER)
+	_dmg_dir.custom_minimum_size = Vector2(48, 48)
+	_dmg_dir.size = Vector2(48, 48)
+	_dmg_dir.pivot_offset = Vector2(24, 24)
+	_dmg_dir.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dmg_dir.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_dmg_dir.modulate.a = 0.0
+	root.add_child(_dmg_dir)
 
 	# Crosshair (centre dot) + hitmarker.
 	_crosshair = ColorRect.new()

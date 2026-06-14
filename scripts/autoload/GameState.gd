@@ -33,7 +33,7 @@ signal world_state_changed(state: int)
 signal quest_step_changed(step: int, text: String)
 signal fragments_changed(collected: int, total: int)
 signal health_changed(health: float, max_health: float)
-signal player_damaged(amount: float)
+signal player_damaged(amount: float, from_pos: Vector3)
 signal player_died
 # A Dimmer's strike clouds your sight for `duration` seconds (HUD darkens).
 signal dim_applied(duration: float)
@@ -251,13 +251,13 @@ func buy_node(id: String, cost: int, req: String) -> bool:
 # ------------------------------------------------------------------- health
 var player_invuln: bool = false   # true during a dodge's i-frames
 
-func damage_player(amount: float) -> void:
+func damage_player(amount: float, from_pos := Vector3.INF) -> void:
 	if health <= 0.0 or player_invuln:
 		return
 	amount *= (1.0 - damage_reduction)
 	health = maxf(health - amount, 0.0)
 	health_changed.emit(health, max_health)
-	player_damaged.emit(amount)
+	player_damaged.emit(amount, from_pos)
 	AudioManager.play("player_hurt")
 	if health <= 0.0:
 		player_died.emit()

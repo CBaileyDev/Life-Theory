@@ -73,6 +73,19 @@ const PATHS := [
 				"cost": 90, "req": "pulse_power", "effect": {"set": {"magic_damage_mult": 2.2}}},
 		],
 	},
+	{
+		"name": "Seer",
+		"nodes": [
+			{"id": "seers_eye", "name": "Seer's Eye", "desc": "Weak-seam strikes (Sight open) cut far deeper (x2.4).",
+				"flavor": "See the seam in everything. Striking a wisp's weak-seam with the Sight open cuts far deeper.",
+				"cost": 60, "req": "", "effect": {"set": {"sight_weakpoint_mult": 2.4}}},
+			{"id": "truths_edge", "name": "Truth's Edge", "desc": "Weak-seam strikes devastate (x3.2).",
+				"cost": 60, "req": "seers_eye", "effect": {"set": {"sight_weakpoint_mult": 3.2}}},
+			{"id": "grief_made_edge", "name": "Grief Made Edge", "desc": "Weak-seam strikes shatter (x4.2); +20 vitality.",
+				"cost": 90, "req": "truths_edge",
+				"effect": {"set": {"sight_weakpoint_mult": 4.2}, "add": {"max_health": 20.0}, "heal_full": true}},
+		],
+	},
 ]
 
 ## Look up a node by id across all paths. Returns {} if not found.
