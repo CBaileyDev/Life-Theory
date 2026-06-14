@@ -43,6 +43,7 @@ func _ready() -> void:
 	_build_beacon()
 	_build_ui()
 	_spawn_player()
+	_build_vista_trigger()
 
 	GameState.world_state_changed.connect(_on_world_changed)
 	SettingsManager.graphics_changed.connect(_apply_graphics)
@@ -392,6 +393,29 @@ func _nearest_fragment():
 			best_d = d
 			best = f.global_position
 	return best
+
+var _vista_seen := false
+
+## A trigger on the Cairn-Ridge overlook: the first time the player climbs to it,
+## Auralis names the seam below (the framed-vista beat). Quietwood only.
+func _build_vista_trigger() -> void:
+	if GameState.current_biome != GameState.Biome.QUIETWOOD:
+		return
+	var area := Area3D.new()
+	var cs := CollisionShape3D.new()
+	var sph := SphereShape3D.new()
+	sph.radius = 4.5
+	cs.shape = sph
+	area.add_child(cs)
+	area.position = Vector3(WorldBuilder.RIDGE.x,
+		_world.height_at(WorldBuilder.RIDGE.x, WorldBuilder.RIDGE.z) + 1.5, WorldBuilder.RIDGE.z)
+	add_child(area)
+	area.body_entered.connect(func(b: Node) -> void:
+		if _vista_seen or not b.is_in_group("player"):
+			return
+		_vista_seen = true
+		GameState.request_dialogue("Auralis", Content.VISTA_REVEAL)
+		GameState.toast.emit("A seam in the world, far below."))
 
 func _spawn_player() -> void:
 	_player = PlayerScript.new()

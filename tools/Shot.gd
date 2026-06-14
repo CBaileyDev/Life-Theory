@@ -64,7 +64,15 @@ func _ready() -> void:
 		{"name": "skyup", "pos": Vector3(0, 2.0, 10.0), "look": Vector3(0, 14.0, 0.0)},
 		{"name": "downgrass", "pos": Vector3(4.0, 1.7, 13.0), "look": Vector3(3.6, 0.0, 11.5)},
 		{"name": "downpond", "pos": Vector3(-7.0, 1.7, 12.0), "look": Vector3(-8.0, -0.4, 10.5)},
+		{"name": "overlook", "pos": Vector3(-19.0, 8.4, -1.0), "look": Vector3(-40.0, 4.0, -1.0)},
 	]
+	# The overlook sits atop the Cairn Ridge — position the camera at eye height
+	# above the actual peak (the ridge adds to the rolling height).
+	var peak: float = _world.height_at(-19.0, -1.0)
+	for s in shots:
+		if s["name"] == "overlook":
+			s["pos"] = Vector3(-19.0, peak + 1.7, -1.0)
+			s["look"] = Vector3(-40.0, peak - 3.0, -1.0)
 	for s in shots:
 		cam.position = s["pos"]
 		cam.look_at(s["look"], Vector3.UP)

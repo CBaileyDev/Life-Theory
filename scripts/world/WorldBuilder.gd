@@ -29,6 +29,12 @@ const POND := Vector3(-11.5, 0.0, 9.0)
 const POND_R := 6.5
 const POND_DEPTH := 2.0
 const WATER_LEVEL := -0.55
+
+# Cairn Ridge — a gentle climbable mound in the west spur, topped by an overlook
+# that frames the layer below (the design's signature vista / "wow" moment).
+const RIDGE := Vector3(-19.0, 0.0, -1.0)
+const RIDGE_R := 11.0
+const RIDGE_H := 6.5
 const SHRINE_POS := Vector3(0, 0, -2.0)
 const AURALIS_POS := Vector3(6.0, 0, 3.0)
 const WISP_HOME := Vector3(-8.0, 0, -7.0)
@@ -146,6 +152,7 @@ func build(parent: Node3D) -> void:
 	_scatter_grass_carpet(parent)
 	_scatter_foliage(parent)
 	_build_wrong_tree(parent)
+	_build_overlook(parent)
 	if biome == 1:
 		_build_seams(parent)
 	_build_trail(parent)
@@ -175,6 +182,10 @@ func height_at(x: float, z: float) -> float:
 	var pd := Vector2(x - POND.x, z - POND.z).length()
 	if pd < POND_R:
 		h -= (1.0 - smoothstep(0.0, POND_R, pd)) * POND_DEPTH
+	# Cairn Ridge: a gentle mound (walkable slope) rising to the west overlook.
+	var rd := Vector2(x - RIDGE.x, z - RIDGE.z).length()
+	if rd < RIDGE_R:
+		h += (1.0 - smoothstep(0.0, RIDGE_R, rd)) * RIDGE_H
 	# Loomstrata: the world stops pretending to be nature. Quantise the rolling
 	# ground into flat FAULT-TERRACES — resolution loss reads as faceting. The
 	# clearing/path stay flat (h≈0 → floors to 0), so traversal is unaffected.
@@ -412,6 +423,9 @@ func _scatter_mm(parent: Node3D, scenes: Array, count: int, smin: float, smax: f
 		# Nothing grows underwater; edge plants just above the line read as reeds.
 		if height_at(p.x, p.z) < WATER_LEVEL + 0.1:
 			continue
+		# Keep the overlook a clean vantage (no grass/trees blocking the vista).
+		if Vector2(p.x - RIDGE.x, p.z - RIDGE.z).length() < 5.5:
+			continue
 		p.y = height_at(p.x, p.z) + y_off
 		var scn: PackedScene = _pick(scenes)
 		var cr := col_r
@@ -577,6 +591,63 @@ func _build_wrong_tree(parent: Node3D) -> void:
 	var p := Vector3(-16.0, 0.0, -9.0)
 	wt.position = Vector3(p.x, height_at(p.x, p.z), p.z)
 	parent.add_child(wt)
+
+## The Cairn-Ridge overlook: a flat stone at the mound's peak and — in the
+## Quietwood — a distant glowing RIFT (a huge wireframe seam + monolith
+## silhouettes) beyond the boundary that previews the Loomstrata below. The
+## Forest controller fires Auralis's vista line when the player reaches it.
+func _build_overlook(parent: Node3D) -> void:
+	var top := Vector3(RIDGE.x, height_at(RIDGE.x, RIDGE.z), RIDGE.z)
+	var slab := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(4.5, 0.5, 4.5)
+	slab.mesh = bm
+	slab.material_override = _rock
+	slab.position = top + Vector3(0, 0.15, 0)
+	parent.add_child(slab)
+	var body := StaticBody3D.new()
+	body.name = "OverlookCollision"
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = bm.size
+	cs.shape = box
+	cs.position = slab.position
+	body.add_child(cs)
+	parent.add_child(body)
+	if biome != 0:
+		return
+	# A DISTANT, fog-shrouded glimpse of the layer below — far beyond the western
+	# treeline and set low, so from the overlook it reads as a faint rift on the
+	# horizon, not a wall. Dialogue does the rest.
+	var rift_c := Vector3(-78.0, -16.0, -1.0)
+	var grid_sh := load("res://shaders/seam_grid.gdshader") as Shader
+	var seam := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(26.0, 15.0)
+	seam.mesh = qm
+	if grid_sh:
+		var sm := ShaderMaterial.new()
+		sm.shader = grid_sh
+		sm.set_shader_parameter("grid_color", Vector3(0.40, 0.62, 0.95))
+		sm.set_shader_parameter("cells", 12.0)
+		sm.set_shader_parameter("intensity", 1.5)
+		seam.material_override = sm
+	else:
+		seam.material_override = MeshFactory.mat_emissive(Color(0.4, 0.62, 0.95), 1.4, true)
+	seam.position = rift_c + Vector3(0, 9.0, 0)
+	seam.rotation.y = deg_to_rad(90.0)
+	parent.add_child(seam)
+	# Dark monolith silhouettes rising from the rift (faintly lit, ominous).
+	var mono_mat := MeshFactory.mat_emissive(Color(0.16, 0.22, 0.42), 0.35)
+	for i in 7:
+		var mono := MeshInstance3D.new()
+		var mb := BoxMesh.new()
+		var mh := rng.randf_range(7.0, 16.0)
+		mb.size = Vector3(rng.randf_range(2.0, 4.5), mh, rng.randf_range(2.0, 4.5))
+		mono.mesh = mb
+		mono.material_override = mono_mat
+		mono.position = rift_c + Vector3(rng.randf_range(-12.0, 8.0), mh * 0.5 - 2.0, rng.randf_range(-14.0, 14.0))
+		parent.add_child(mono)
 
 # ------------------------------------------------------------ Loomstrata seams
 ## The machinery showing through nature: floating glowing wireframe seams and
